@@ -1,20 +1,156 @@
 import type { Request, Response } from 'express';
-import { createClient } from 'webdav';
+
+class NativeWebDavClient {
+  private baseUrl: string;
+  private authHeader: Record<string, string>;
+
+  constructor(serverUrl: string, username?: string, password?: string) {
+    if (!serverUrl) {
+      throw new Error('WebDAV 服务器地址不能为空');
+    }
+    let url = serverUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    this.baseUrl = url.replace(/\/+$/, '');
+
+    this.authHeader = {};
+    if (username || password) {
+      const authStr = `${username || ''}:${password || ''}`;
+      const token = Buffer.from(authStr).toString('base64');
+      this.authHeader = { Authorization: `Basic ${token}` };
+    }
+  }
+
+  private resolveUrl(path: string): string {
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const encodedPath = cleanPath.split('/').map(encodeURIComponent).join('/');
+    return `${this.baseUrl}${encodedPath}`;
+  }
+
+  async exists(path: string): Promise<boolean> {
+    try {
+      const targetUrl = this.resolveUrl(path);
+      const res = await fetch(targetUrl, {
+        method: 'PROPFIND',
+        headers: {
+          ...this.authHeader,
+          Depth: '0',
+        },
+      });
+      return (res.status >= 200 && res.status < 300) || res.status === 207;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  async createDirectory(path: string): Promise<void> {
+    const targetUrl = this.resolveUrl(path);
+    const res = await fetch(targetUrl, {
+      method: 'MKCOL',
+      headers: { ...this.authHeader },
+    });
+    if ((res.status >= 200 && res.status < 300) || res.status === 405) {
+      return;
+    }
+    const text = await res.text();
+    throw new Error(`创建 WebDAV 目录失败 (${res.status}): ${text.slice(0, 100)}`);
+  }
+
+  async putFileContents(path: string, content: string, _options?: any): Promise<void> {
+    const targetUrl = this.resolveUrl(path);
+    const res = await fetch(targetUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        ...this.authHeader,
+      },
+      body: content,
+    });
+    if (res.status >= 200 && res.status < 300) {
+      return;
+    }
+    const text = await res.text();
+    throw new Error(`写入 WebDAV 文件失败 (${res.status}): ${text.slice(0, 100)}`);
+  }
+
+  async getFileContents(path: string, _options?: any): Promise<string> {
+    const targetUrl = this.resolveUrl(path);
+    const res = await fetch(targetUrl, {
+      method: 'GET',
+      headers: { ...this.authHeader },
+    });
+    if (!res.ok) {
+      throw new Error(`读取 WebDAV 文件失败 (${res.status})`);
+    }
+    return await res.text();
+  }
+
+  async getDirectoryContents(path: string): Promise<Array<{ basename: string; filename: string; size: number; lastmod: string; type: 'file' | 'directory' }>> {
+    const targetUrl = this.resolveUrl(path);
+    const res = await fetch(targetUrl, {
+      method: 'PROPFIND',
+      headers: {
+        ...this.authHeader,
+        Depth: '1',
+      },
+    });
+    if (!res.ok) {
+      throw new Error(`读取 WebDAV 目录失败 (${res.status})`);
+    }
+    const xml = await res.text();
+    return this.parsePropfindXml(xml);
+  }
+
+  private parsePropfindXml(xml: string) {
+    const items: Array<{ basename: string; filename: string; size: number; lastmod: string; type: 'file' | 'directory' }> = [];
+    const responseRegex = /<(?:[a-zA-Z0-9]+:)?response>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?response>/gi;
+    let match;
+
+    while ((match = responseRegex.exec(xml)) !== null) {
+      const block = match[1];
+
+      const hrefMatch = /<(?:[a-zA-Z0-9]+:)?href>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?href>/i.exec(block);
+      if (!hrefMatch) continue;
+
+      let rawHref = hrefMatch[1].trim();
+      let href = rawHref;
+      try {
+        href = decodeURIComponent(rawHref);
+      } catch (e) {
+        // ignore
+      }
+
+      const isDir = /<(?:[a-zA-Z0-9]+:)?resourcetype>[\s\S]*?<(?:[a-zA-Z0-9]+:)?collection\s*\/?>/i.test(block);
+
+      const displayMatch = /<(?:[a-zA-Z0-9]+:)?displayname>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?displayname>/i.exec(block);
+      let basename = displayMatch ? displayMatch[1].trim() : '';
+      if (!basename) {
+        const cleanHref = href.replace(/\/$/, '');
+        basename = cleanHref.split('/').pop() || '';
+      }
+
+      const sizeMatch = /<(?:[a-zA-Z0-9]+:)?getcontentlength>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?getcontentlength>/i.exec(block);
+      const size = sizeMatch ? parseInt(sizeMatch[1].trim(), 10) || 0 : 0;
+
+      const lastmodMatch = /<(?:[a-zA-Z0-9]+:)?getlastmodified>([\s\S]*?)<\/(?:[a-zA-Z0-9]+:)?getlastmodified>/i.exec(block);
+      const lastmod = lastmodMatch ? lastmodMatch[1].trim() : new Date().toISOString();
+
+      items.push({
+        basename,
+        filename: basename,
+        size,
+        lastmod,
+        type: isDir ? 'directory' : 'file',
+      });
+    }
+
+    return items;
+  }
+}
 
 function getWebdavClient(serverUrl: string, username?: string, password?: string) {
-  if (!serverUrl) {
-    throw new Error('WebDAV 服务器地址不能为空');
-  }
-
-  let url = serverUrl.trim();
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = 'https://' + url;
-  }
-
-  return createClient(url, {
-    username: username || '',
-    password: password || '',
-  });
+  return new NativeWebDavClient(serverUrl, username, password);
 }
 
 const BACKUP_DIR = '/AINovelistBackups';
@@ -168,7 +304,7 @@ export async function handleWebdavRestore(req: Request, res: Response) {
 
     let backupData: any = null;
     try {
-      backupData = typeof fileContent === 'string' ? JSON.parse(fileContent) : JSON.parse(fileContent.toString());
+      backupData = typeof fileContent === 'string' ? JSON.parse(fileContent) : JSON.parse(String(fileContent));
     } catch (e) {
       return res.status(400).json({ error: '备份文件内容格式损坏或无法解析为 JSON' });
     }

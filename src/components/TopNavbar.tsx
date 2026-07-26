@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Sparkles, Sliders, Moon, Sun, Feather, Lightbulb } from 'lucide-react';
+import { BookOpen, Sparkles, Sliders, Moon, Sun, Feather, Lightbulb, Cloud } from 'lucide-react';
 import { UiSettings } from '../types';
 
 interface TopNavbarProps {
@@ -27,8 +27,10 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
     { id: 'setup', label: '写作设定', icon: Sliders },
     { id: 'writer', label: '小说扩写', icon: Feather },
     { id: 'inspiration', label: '灵感供给站', icon: Lightbulb },
-    { id: 'config', label: 'API配置与基础设置', icon: Sparkles },
+    { id: 'config', label: 'API与WebDAV设置', icon: Sparkles },
   ];
+
+  const hasWebdavConfig = Boolean(uiSettings.webdavConfig?.username && uiSettings.webdavConfig?.webdavUrl);
 
   return (
     <header className="sticky top-0 z-50 transition-all duration-300 backdrop-blur-2xl bg-white/40 dark:bg-slate-900/50 border-b border-white/40 dark:border-slate-800/80 shadow-lg shadow-purple-200/20 dark:shadow-none">
@@ -74,7 +76,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 style={isActive ? { background: 'var(--accent-gradient)' } : {}}
-                className={`relative flex items-center gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-semibold transition-all duration-200 shrink-0 select-none ${
+                className={`relative flex items-center gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-semibold transition-all duration-200 shrink-0 select-none cursor-pointer ${
                   isActive
                     ? 'text-white shadow-md shadow-black/10'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-800/60'
@@ -90,9 +92,22 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         {/* Right actions */}
         <div className="flex items-center gap-1.5 shrink-0">
           <button
+            onClick={() => setActiveTab('config')}
+            title={hasWebdavConfig ? '已绑定坚果云 WebDAV (点击管理)' : '前往配置 WebDAV 跨设备云备份'}
+            className={`flex items-center gap-1 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              hasWebdavConfig
+                ? 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30 hover:bg-sky-500/20'
+                : 'bg-white/50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 border-slate-200/60 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800'
+            }`}
+          >
+            <Cloud className="w-3.5 h-3.5 text-sky-500" />
+            <span className="hidden sm:inline">{hasWebdavConfig ? 'WebDAV已连接' : 'WebDAV备份'}</span>
+          </button>
+
+          <button
             onClick={toggleDarkMode}
             title={uiSettings.mode === 'dark' ? '切换浅色模式' : '切换深色模式'}
-            className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-all border border-white/60 dark:border-slate-700/60 shadow-xs"
+            className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-all border border-white/60 dark:border-slate-700/60 shadow-xs cursor-pointer"
           >
             {uiSettings.mode === 'dark' ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />}
           </button>

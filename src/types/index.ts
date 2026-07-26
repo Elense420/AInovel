@@ -101,6 +101,16 @@ export interface UiSettings {
   rerollApiModel: string | null;
   inspirationApiCfgId: string | null;
   inspirationApiModel: string | null;
+  webdavConfig?: WebdavConfig;
+}
+
+export interface WebdavConfig {
+  webdavUrl: string;
+  username: string;
+  password: string;
+  autoBackupOnSave?: boolean;
+  lastBackupTime?: number;
+  lastBackupFile?: string;
 }
 
 export interface HistoryItem {

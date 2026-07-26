@@ -2,6 +2,12 @@ import express from 'express';
 import path from 'path';
 import dotenv from 'dotenv';
 import { handleChatCompletionRequest, handleModelsRequest } from './src/server/aiRouter';
+import {
+  handleWebdavTest,
+  handleWebdavBackup,
+  handleWebdavList,
+  handleWebdavRestore,
+} from './src/server/webdavRouter';
 
 dotenv.config();
 
@@ -16,6 +22,12 @@ app.get('/api/health', (req, res) => {
 
 app.get('/api/ai/models', handleModelsRequest as any);
 app.post('/api/ai/chat', handleChatCompletionRequest as any);
+
+// WebDAV Backup Routes
+app.post('/api/webdav/test', handleWebdavTest as any);
+app.post('/api/webdav/backup', handleWebdavBackup as any);
+app.post('/api/webdav/list', handleWebdavList as any);
+app.post('/api/webdav/restore', handleWebdavRestore as any);
 
 // Serve static assets from dist
 const distPath = path.join(process.cwd(), 'dist');

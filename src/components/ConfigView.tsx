@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Cpu, Heart, Palette, Database, Save, Trash2, CheckCircle, RefreshCw, Layers } from 'lucide-react';
-import { ApiConfig, UiSettings, HistoryItem } from '../types';
+import { Settings, Cpu, Heart, Palette, Database, Save, Trash2, CheckCircle, RefreshCw, Layers, Cloud, CloudUpload, CloudDownload, Eye, EyeOff, Server, ShieldCheck, Check } from 'lucide-react';
+import { ApiConfig, UiSettings, HistoryItem, WebdavConfig } from '../types';
 import { dbPut, dbGetAll, dbGet, dbDelete, dbClear, STORE_NAMES } from '../services/db';
 import { testAndFetchModels } from '../services/apiClient';
+import { testWebdavConnection, backupToWebdav, listWebdavBackups, restoreFromWebdav } from '../services/webdavService';
 
 interface ConfigViewProps {
   configs: ApiConfig[];
@@ -45,6 +46,129 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [xpStatus, setXpStatus] = useState('');
 
   const [backupStatus, setBackupStatus] = useState('');
+
+  // WebDAV Cloud Sync States
+  const [webdavUrl, setWebdavUrl] = useState(uiSettings.webdavConfig?.webdavUrl || 'https://dav.jianguoyun.com/dav/');
+  const [webdavUsername, setWebdavUsername] = useState(uiSettings.webdavConfig?.username || '');
+  const [webdavPassword, setWebdavPassword] = useState(uiSettings.webdavConfig?.password || '');
+  const [showWebdavPassword, setShowWebdavPassword] = useState(false);
+  const [autoBackupOnSave, setAutoBackupOnSave] = useState(uiSettings.webdavConfig?.autoBackupOnSave || false);
+
+  const [webdavStatus, setWebdavStatus] = useState('');
+  const [isWebdavLoading, setIsWebdavLoading] = useState(false);
+  const [remoteFiles, setRemoteFiles] = useState<Array<{ basename: string; filename: string; size: number; lastmod: string }>>([]);
+  const [selectedRemoteFile, setSelectedRemoteFile] = useState('');
+
+  const getWebdavConfigObject = (): WebdavConfig => ({
+    webdavUrl: webdavUrl.trim(),
+    username: webdavUsername.trim(),
+    password: webdavPassword.trim(),
+    autoBackupOnSave,
+    lastBackupTime: uiSettings.webdavConfig?.lastBackupTime,
+    lastBackupFile: uiSettings.webdavConfig?.lastBackupFile,
+  });
+
+  const handleSaveWebdavSettings = async () => {
+    const config = getWebdavConfigObject();
+    await updateUiSettingsKey('webdavConfig', config);
+    setWebdavStatus('💾 WebDAV 配置与自动同步选项已保存！');
+    setTimeout(() => setWebdavStatus(''), 3000);
+  };
+
+  const handleTestWebdav = async () => {
+    if (!webdavUrl.trim() || !webdavUsername.trim() || !webdavPassword.trim()) {
+      setWebdavStatus('❌ 请先完整填写 WebDAV 服务器地址、账号与密码');
+      return;
+    }
+
+    setIsWebdavLoading(true);
+    setWebdavStatus('正在连接 WebDAV 服务器...');
+    try {
+      const config = getWebdavConfigObject();
+      const res = await testWebdavConnection(config);
+      await updateUiSettingsKey('webdavConfig', config);
+      setWebdavStatus(`✅ ${res.message || 'WebDAV 连接测试成功！'}`);
+    } catch (err: any) {
+      setWebdavStatus(`❌ 连接失败: ${err.message}`);
+    } finally {
+      setIsWebdavLoading(false);
+    }
+  };
+
+  const handleBackupToWebdavAction = async () => {
+    if (!webdavUrl.trim() || !webdavUsername.trim() || !webdavPassword.trim()) {
+      setWebdavStatus('❌ 请先在上方配置坚果云/WebDAV 账号与密码');
+      return;
+    }
+
+    setIsWebdavLoading(true);
+    setWebdavStatus('正在生成并上传全量数据备份至 WebDAV 云端...');
+    try {
+      const config = getWebdavConfigObject();
+      const res = await backupToWebdav(config);
+      const updatedConfig = {
+        ...config,
+        lastBackupTime: Date.now(),
+        lastBackupFile: res.fileName,
+      };
+      await updateUiSettingsKey('webdavConfig', updatedConfig);
+      setWebdavStatus(`🎉 成功备份所有数据！已上传至云端: ${res.fileName}`);
+      handleFetchWebdavFiles();
+    } catch (err: any) {
+      setWebdavStatus(`❌ WebDAV 备份失败: ${err.message}`);
+    } finally {
+      setIsWebdavLoading(false);
+    }
+  };
+
+  const handleFetchWebdavFiles = async () => {
+    if (!webdavUrl.trim() || !webdavUsername.trim() || !webdavPassword.trim()) {
+      setWebdavStatus('❌ 请先填写 WebDAV 配置信息');
+      return;
+    }
+
+    setIsWebdavLoading(true);
+    setWebdavStatus('正在获取 WebDAV 云端备份列表...');
+    try {
+      const config = getWebdavConfigObject();
+      const files = await listWebdavBackups(config);
+      setRemoteFiles(files);
+      if (files.length > 0) {
+        setSelectedRemoteFile(files[0].filename || files[0].basename);
+        setWebdavStatus(`✅ 已拉取到 ${files.length} 个云端备份文件`);
+      } else {
+        setWebdavStatus('ℹ️ 云端备份目录中暂无可恢复的 .json 备份文件');
+      }
+    } catch (err: any) {
+      setWebdavStatus(`❌ 拉取云端备份失败: ${err.message}`);
+    } finally {
+      setIsWebdavLoading(false);
+    }
+  };
+
+  const handleRestoreFromWebdavAction = async () => {
+    if (!selectedRemoteFile) {
+      setWebdavStatus('❌ 请先在列表中选择一个需要恢复的云端备份文件');
+      return;
+    }
+
+    if (!confirm(`⚠️ 确定要从云端备份 [${selectedRemoteFile}] 恢复数据吗？\n这将覆盖本地当前的小说、章节、设置及历史记录！`)) {
+      return;
+    }
+
+    setIsWebdavLoading(true);
+    setWebdavStatus('正在从 WebDAV 下载备份并恢复数据...');
+    try {
+      const config = getWebdavConfigObject();
+      await restoreFromWebdav(config, selectedRemoteFile);
+      setWebdavStatus('🎉 跨设备数据还原成功！页面即刻刷新以应用全新数据...');
+      setTimeout(() => location.reload(), 1200);
+    } catch (err: any) {
+      setWebdavStatus(`❌ 还原数据失败: ${err.message}`);
+    } finally {
+      setIsWebdavLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadXpHistory();
@@ -701,6 +825,175 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
             {backupStatus}
           </p>
+        )}
+      </div>
+
+      {/* 7. WebDAV Cloud Sync */}
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl space-y-6">
+        <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-sky-500/10 text-sky-500 flex items-center justify-center">
+              <Cloud className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span>WEBDAV 云端同步与跨设备备份</span>
+                <span className="px-2 py-0.5 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 text-[10px] font-bold">
+                  推荐: 坚果云
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                支持坚果云、Nextcloud、Owncloud 或自建 NAS 的 WebDAV 服务，在多台电脑/设备上随时无缝同步所有小说与大纲。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* WebDAV Account Form */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-3 flex items-center justify-between">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+              WebDAV 服务器地址
+            </label>
+            <button
+              type="button"
+              onClick={() => setWebdavUrl('https://dav.jianguoyun.com/dav/')}
+              className="text-[11px] text-sky-600 dark:text-sky-400 hover:underline flex items-center gap-1 cursor-pointer"
+            >
+              <Server className="w-3 h-3" />
+              <span>填入坚果云默认地址</span>
+            </button>
+          </div>
+          <div className="sm:col-span-3">
+            <input
+              type="text"
+              value={webdavUrl}
+              onChange={(e) => setWebdavUrl(e.target.value)}
+              placeholder="https://dav.jianguoyun.com/dav/"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-800/60 text-xs sm:text-sm focus:outline-hidden font-mono"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              WebDAV 账号 (坚果云注册邮箱)
+            </label>
+            <input
+              type="text"
+              value={webdavUsername}
+              onChange={(e) => setWebdavUsername(e.target.value)}
+              placeholder="user@example.com"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-800/60 text-xs sm:text-sm focus:outline-hidden"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+              WebDAV 应用密码 / 授权密码
+            </label>
+            <div className="relative">
+              <input
+                type={showWebdavPassword ? 'text' : 'password'}
+                value={webdavPassword}
+                onChange={(e) => setWebdavPassword(e.target.value)}
+                placeholder="坚果云第三方应用密码"
+                className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-800/60 text-xs sm:text-sm focus:outline-hidden font-mono"
+              />
+              <button
+                type="button"
+                onClick={() => setShowWebdavPassword(!showWebdavPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                {showWebdavPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-end gap-2">
+            <button
+              onClick={handleTestWebdav}
+              disabled={isWebdavLoading}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              <span>测试连接</span>
+            </button>
+            <button
+              onClick={handleSaveWebdavSettings}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs sm:text-sm font-medium transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <Save className="w-4 h-4" />
+              <span>保存配置</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Cloud Actions Panel */}
+        <div className="p-4 sm:p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <CloudUpload className="w-4 h-4 text-sky-500" />
+                <span>一键备份 / 从云端恢复</span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                每次备份均会自动存入坚果云的 <code className="bg-slate-200 dark:bg-slate-800 px-1 py-0.5 rounded text-[10px] font-mono">/AINovelistBackups</code> 目录
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleBackupToWebdavAction}
+                disabled={isWebdavLoading}
+                className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-600 text-white text-xs font-semibold shadow-md shadow-sky-500/20 transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <CloudUpload className="w-3.5 h-3.5" />
+                <span>备份至坚果云</span>
+              </button>
+
+              <button
+                onClick={handleFetchWebdavFiles}
+                disabled={isWebdavLoading}
+                className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 text-xs font-semibold transition-all flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isWebdavLoading ? 'animate-spin' : ''}`} />
+                <span>获取云端备份文件</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Remote Files Dropdown and Restore */}
+          {remoteFiles.length > 0 && (
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-3 border-t border-slate-200/60 dark:border-slate-800">
+              <select
+                value={selectedRemoteFile}
+                onChange={(e) => setSelectedRemoteFile(e.target.value)}
+                className="flex-1 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-xs text-slate-800 dark:text-slate-200 font-mono"
+              >
+                {remoteFiles.map((f) => (
+                  <option key={f.filename || f.basename} value={f.filename || f.basename}>
+                    {f.basename} ({Math.round(f.size / 1024)} KB - {new Date(f.lastmod).toLocaleString()})
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={handleRestoreFromWebdavAction}
+                disabled={isWebdavLoading}
+                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold shadow-md shadow-emerald-500/20 transition-all flex items-center justify-center gap-1.5 active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+              >
+                <CloudDownload className="w-3.5 h-3.5" />
+                <span>还原选中云端备份数据</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Status Message */}
+        {webdavStatus && (
+          <div className="text-xs p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 font-mono leading-relaxed flex items-center gap-2">
+            <span>{webdavStatus}</span>
+          </div>
         )}
       </div>
     </div>

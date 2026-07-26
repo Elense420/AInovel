@@ -51,10 +51,10 @@ export function parseChapterAndSuggestions(rawText: string, defaultTitle: string
       title: defaultTitle,
       bodyText: '',
       suggestions: [
-        '突发惊天悬念变故，打破现有僵局并拉开新冲突',
-        '关键角色揭晓隐藏身份/暗藏伏笔，推高情节张力',
-        '主角面临道德与利益的艰难抉择，展现性格张力',
-        '敌对势力发动突袭/陷阱，逼迫主角绝境反击',
+        '主角在调查古籍线索时意外触发禁忌机关，强敌闻风而至引爆正面冲突，被迫在生死存亡边缘暴露深藏不露的终极底牌。',
+        '关键阵营的核心人物突然临阵倒戈，揭露出一段尘封多年的宗门惊天秘辛，直接将主角与各方势力的矛盾推向不死不休的高潮。',
+        '主角深陷道德困境与利益抉择的双重泥潭，绝境之中毅然选择破釜沉舟，以意想不到的极具张力手段绝地反击反制强敌。',
+        '神秘第三方暗黑势力趁各方激战之际强行介入，以雷霆手段洗劫珍贵核心资源，迫使原有的生死敌对双方不得不暂时虚与委蛇。',
       ],
     };
   }
@@ -62,9 +62,8 @@ export function parseChapterAndSuggestions(rawText: string, defaultTitle: string
   let mainPart = rawText;
   let suggestionsPart = '';
 
-  // Matches suggestion headers like:
-  // \n---\n#### 后续发展建议
-  // #### 后续发展建议 / ### 后续剧情建议 / 【后续发展建议】 / 后续灵感方向：
+  // Comprehensive Regex for matching suggestion headers
+  // E.g., --- \n #### 后续发展建议, ### 后续剧情走向, 【后续建议】, 剧情发展建议：, etc.
   const suggestionHeaderRegex = /(?:(?:\r?\n){1,2}(?:---|___|\*\*\*)\s*)?(?:(?:\r?\n){1,2}#{1,6}\s*|\r?\n\*{2}|\r?\n【|\r?\n)?(?:后续(?:发展|剧情)?(?:建议|思路|方向|走向)|剧情发展建议|后续灵感方向|后续建议)(?:】|\*\*|：|:|\s|\r?\n)*/i;
 
   const match = rawText.match(suggestionHeaderRegex);
@@ -90,10 +89,11 @@ export function parseChapterAndSuggestions(rawText: string, defaultTitle: string
   // Clean Title out of main body
   let bodyText = mainPart.replace(/###?.*/, '').trim();
 
-  // Clean out any leftover trailing '---' or suggestion header lines from bodyText
+  // Thoroughly strip any leftover trailing separator or suggestion headers that might remain in bodyText
   bodyText = bodyText
     .replace(/(?:\r?\n){1,2}(?:---|___|\*\*\*)\s*$/g, '')
     .replace(/(?:\r?\n){1,2}#{1,6}\s*(?:后续(?:发展|剧情)?(?:建议|思路|方向)|剧情发展建议).*/gi, '')
+    .replace(/(?:\r?\n){1,2}【(?:后续(?:发展|剧情)?(?:建议|思路|方向)|剧情发展建议)】.*/gi, '')
     .trim();
 
   // Extract Suggestions
@@ -111,22 +111,21 @@ export function parseChapterAndSuggestions(rawText: string, defaultTitle: string
 
       // Match bullets: - , * , 1. , 1、, [建议1], 【建议1】, 建议1:
       const itemMatch = trimmed.match(/^(?:[-*•]\s*|\d+[\.、\s]\s*|(?:\[|【)?建议\d+(?:\]|】|：|:)?\s*)\s*(.+)/);
+      let itemContent = '';
       if (itemMatch && itemMatch[1]) {
-        const itemContent = itemMatch[1].replace(/^\[|\]$|^【|】$/g, '').trim();
-        if (itemContent && itemContent.length > 2 && !suggestions.includes(itemContent)) {
-          suggestions.push(itemContent);
-        }
+        itemContent = itemMatch[1].replace(/^\[|\]$|^【|】$/g, '').trim();
       } else {
-        const cleanLine = trimmed.replace(/^[-*•\d\.、\[\]【】建议\:\：\s]+/, '').trim();
-        if (
-          cleanLine &&
-          cleanLine.length > 4 &&
-          !cleanLine.startsWith('#') &&
-          !cleanLine.startsWith('---') &&
-          !suggestions.includes(cleanLine)
-        ) {
-          suggestions.push(cleanLine);
-        }
+        itemContent = trimmed.replace(/^[-*•\d\.、\[\]【】建议\:\：\s]+/, '').trim();
+      }
+
+      if (
+        itemContent &&
+        itemContent.length > 2 &&
+        !itemContent.startsWith('#') &&
+        !itemContent.startsWith('---') &&
+        !suggestions.includes(itemContent)
+      ) {
+        suggestions.push(itemContent);
       }
     }
   }
@@ -134,10 +133,10 @@ export function parseChapterAndSuggestions(rawText: string, defaultTitle: string
   // Fallback if AI outputted no suggestions or non-standard format
   if (suggestions.length === 0) {
     suggestions.push(
-      '突发惊天悬念变故，打破现有僵局并拉开新冲突',
-      '关键角色揭晓隐藏身份/暗藏伏笔，推高情节张力',
-      '主角面临道德与利益的艰难抉择，展现性格张力',
-      '敌对势力发动突袭/陷阱，逼迫主角绝境反击'
+      '主角在调查古籍线索时意外触发禁忌机关，强敌闻风而至引爆正面冲突，被迫在生死存亡边缘暴露深藏不露的终极底牌。',
+      '关键阵营的核心人物突然临阵倒戈，揭露出一段尘封多年的宗门惊天秘辛，直接将主角与各方势力的矛盾推向不死不休的高潮。',
+      '主角深陷道德困境与利益抉择的双重泥潭，绝境之中毅然选择破釜沉舟，以意想不到的极具张力手段绝地反击反制强敌。',
+      '神秘第三方暗黑势力趁各方激战之际强行介入，以雷霆手段洗劫珍贵核心资源，迫使原有的生死敌对双方不得不暂时虚与委蛇。'
     );
   }
 
@@ -443,13 +442,15 @@ export const WriterView: React.FC<WriterViewProps> = ({
 
     userPrompt += `\n输出格式规范（必须严格遵守，绝对不要遗漏分隔符）：
 ### [此处填写章节标题]
-[此处开始章节正文。请注意：在正文中绝对不要使用"---"（三个破折号）符号]
+[此处开始章节正文。请注意：在正文中绝对不要使用"---"（三个破折号）符号，也绝对不要在正文中写“后续发展建议”或“建议1”]
 ---
 #### 后续发展建议
-- [建议1：具体明确的剧情分支1]
-- [建议2：具体明确的剧情分支2]
-- [建议3：具体明确的剧情分支3]
-- [建议4：具体明确的剧情分支4]`;
+- [建议1：包含具体人物互动、悬念推演与情境转变的完整长剧走向，单条字数必须保持在30字以上]
+- [建议2：包含具体人物互动、悬念推演与情境转变的完整长剧走向，单条字数必须保持在30字以上]
+- [建议3：包含具体人物互动、悬念推演与情境转变的完整长剧走向，单条字数必须保持在30字以上]
+- [建议4：包含具体人物互动、悬念推演与情境转变的完整长剧走向，单条字数必须保持在30字以上]
+
+⚠️【高权重长文本约束】：在“#### 后续发展建议”下方的 4 条建议中，每一条建议都必须极其详尽具体，包含起因、人物交锋与悬念留白，单条建议字数严禁少于 30 字（建议 30 - 80 字）！严禁输出过短的简略句子！`;
 
     const messages = [
       { role: 'system' as const, content: systemPrompt },
@@ -587,16 +588,18 @@ export const WriterView: React.FC<WriterViewProps> = ({
 ${activeChapter.text.slice(-800)}
 ${xpPreferences ? `\n# 用户偏好：\n${xpPreferences}` : ''}
 
-请为下一章节提供4个全新的、不同于已有建议的情节走向 (每条20-50字)。
+请为下一章节提供4个全新的、不同于已有建议的情节走向。
+【硬性字数与质量要求】：每条建议必须极其具体详尽、包含人物具体动作互动与冲突悬念推演，单条建议字数严禁少于 30 字（建议 30 - 80 字）！
+
 已有建议（请避免重复）：
 - ${existingSuggestionsStr || '无'}
 
 输出格式要求：
 #### 后续发展建议
-- [建议1]
-- [建议2]
-- [建议3]
-- [建议4]`;
+- [建议1：详尽的具体发展方向，包含人物动作与情绪冲突，字数在30字以上]
+- [建议2：详尽的具体发展方向，包含人物动作与情绪冲突，字数在30字以上]
+- [建议3：详尽的具体发展方向，包含人物动作与情绪冲突，字数在30字以上]
+- [建议4：详尽的具体发展方向，包含人物动作与情绪冲突，字数在30字以上]`;
 
       const res = await chatCompletion({
         provider: rerollCfg?.provider,
@@ -1032,32 +1035,34 @@ ${chaptersText}`;
             </div>
 
             {/* AI Plot Directions/Suggestions */}
-            {activeChapter?.allSuggestions && activeChapter.allSuggestions.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                    <span>AI 给出的后续灵感方向 (点击填充)</span>
-                  </h4>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>AI 给出的后续灵感方向 (点击填充)</span>
+                </h4>
 
+                {activeChapter?.allSuggestions && activeChapter.allSuggestions.length > 0 && (
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleRerollSuggestions}
                       disabled={isGenerating}
-                      className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium transition-colors flex items-center gap-1"
+                      className="px-3 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-medium transition-colors flex items-center gap-1 disabled:opacity-50"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                       <span>🔄 重掷建议</span>
                     </button>
                     <button
                       onClick={handleClearSuggestions}
-                      className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-300"
+                      className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
                     >
                       清空建议
                     </button>
                   </div>
-                </div>
+                )}
+              </div>
 
+              {activeChapter?.allSuggestions && activeChapter.allSuggestions.length > 0 ? (
                 <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                   {activeChapter.allSuggestions.map((group, groupIdx) => (
                     <div
@@ -1084,8 +1089,24 @@ ${chaptersText}`;
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                /* Empty State when no suggestions exist */
+                <div className="p-6 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-center space-y-3">
+                  <Sparkles className="w-8 h-8 mx-auto text-amber-500 opacity-60" />
+                  <div className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+                    暂未解析出下一章灵感建议或建议区已清空
+                  </div>
+                  <button
+                    onClick={handleRerollSuggestions}
+                    disabled={isGenerating}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold shadow-md shadow-emerald-500/20 transition-all flex items-center gap-1.5 mx-auto active:scale-95 disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>尝试重新获取建议</span>
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* Continuation Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 pt-2">

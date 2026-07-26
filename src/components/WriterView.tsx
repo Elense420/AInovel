@@ -41,6 +41,113 @@ interface WriterViewProps {
   onOpenSummaryViewModal: (summary: any) => void;
 }
 
+/**
+ * Robustly parses generated raw chapter output into Title, Main Body Text, and Suggestions List.
+ * Strips out suggestion blocks completely from the chapter text to avoid suggestions getting stuck in main text.
+ */
+export function parseChapterAndSuggestions(rawText: string, defaultTitle: string) {
+  if (!rawText) {
+    return {
+      title: defaultTitle,
+      bodyText: '',
+      suggestions: [
+        '突发惊天悬念变故，打破现有僵局并拉开新冲突',
+        '关键角色揭晓隐藏身份/暗藏伏笔，推高情节张力',
+        '主角面临道德与利益的艰难抉择，展现性格张力',
+        '敌对势力发动突袭/陷阱，逼迫主角绝境反击',
+      ],
+    };
+  }
+
+  let mainPart = rawText;
+  let suggestionsPart = '';
+
+  // Matches suggestion headers like:
+  // \n---\n#### 后续发展建议
+  // #### 后续发展建议 / ### 后续剧情建议 / 【后续发展建议】 / 后续灵感方向：
+  const suggestionHeaderRegex = /(?:(?:\r?\n){1,2}(?:---|___|\*\*\*)\s*)?(?:(?:\r?\n){1,2}#{1,6}\s*|\r?\n\*{2}|\r?\n【|\r?\n)?(?:后续(?:发展|剧情)?(?:建议|思路|方向|走向)|剧情发展建议|后续灵感方向|后续建议)(?:】|\*\*|：|:|\s|\r?\n)*/i;
+
+  const match = rawText.match(suggestionHeaderRegex);
+  if (match && match.index !== undefined) {
+    mainPart = rawText.substring(0, match.index).trim();
+    suggestionsPart = rawText.substring(match.index + match[0].length).trim();
+  } else if (rawText.includes('---')) {
+    const parts = rawText.split('---');
+    mainPart = parts[0] || '';
+    suggestionsPart = parts.slice(1).join('\n') || '';
+  }
+
+  // Extract Title
+  let title = defaultTitle;
+  const titleMatch = mainPart.match(/###?\s*(.*)/);
+  if (titleMatch) {
+    const rawTitle = titleMatch[1].replace(/^[#*\s]+|[#*\s]+$/g, '').trim();
+    if (rawTitle) {
+      title = rawTitle;
+    }
+  }
+
+  // Clean Title out of main body
+  let bodyText = mainPart.replace(/###?.*/, '').trim();
+
+  // Clean out any leftover trailing '---' or suggestion header lines from bodyText
+  bodyText = bodyText
+    .replace(/(?:\r?\n){1,2}(?:---|___|\*\*\*)\s*$/g, '')
+    .replace(/(?:\r?\n){1,2}#{1,6}\s*(?:后续(?:发展|剧情)?(?:建议|思路|方向)|剧情发展建议).*/gi, '')
+    .trim();
+
+  // Extract Suggestions
+  const suggestions: string[] = [];
+
+  if (suggestionsPart) {
+    const cleanedText = suggestionsPart
+      .replace(/^(?:#{1,6}\s*|\*{1,2}|【)?(?:后续(?:发展|剧情)?(?:建议|思路|方向)|剧情发展建议)[】\*\:\：\s]*/gi, '')
+      .trim();
+
+    const lines = cleanedText.split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Match bullets: - , * , 1. , 1、, [建议1], 【建议1】, 建议1:
+      const itemMatch = trimmed.match(/^(?:[-*•]\s*|\d+[\.、\s]\s*|(?:\[|【)?建议\d+(?:\]|】|：|:)?\s*)\s*(.+)/);
+      if (itemMatch && itemMatch[1]) {
+        const itemContent = itemMatch[1].replace(/^\[|\]$|^【|】$/g, '').trim();
+        if (itemContent && itemContent.length > 2 && !suggestions.includes(itemContent)) {
+          suggestions.push(itemContent);
+        }
+      } else {
+        const cleanLine = trimmed.replace(/^[-*•\d\.、\[\]【】建议\:\：\s]+/, '').trim();
+        if (
+          cleanLine &&
+          cleanLine.length > 4 &&
+          !cleanLine.startsWith('#') &&
+          !cleanLine.startsWith('---') &&
+          !suggestions.includes(cleanLine)
+        ) {
+          suggestions.push(cleanLine);
+        }
+      }
+    }
+  }
+
+  // Fallback if AI outputted no suggestions or non-standard format
+  if (suggestions.length === 0) {
+    suggestions.push(
+      '突发惊天悬念变故，打破现有僵局并拉开新冲突',
+      '关键角色揭晓隐藏身份/暗藏伏笔，推高情节张力',
+      '主角面临道德与利益的艰难抉择，展现性格张力',
+      '敌对势力发动突袭/陷阱，逼迫主角绝境反击'
+    );
+  }
+
+  return {
+    title,
+    bodyText,
+    suggestions: suggestions.slice(0, 4),
+  };
+}
+
 export const WriterView: React.FC<WriterViewProps> = ({
   currentBook,
   currentChapterIndex,
@@ -69,10 +176,16 @@ export const WriterView: React.FC<WriterViewProps> = ({
   const [rewritePlotInput, setRewritePlotInput] = useState('');
   const [nextPlotInput, setNextPlotInput] = useState('');
 
-  // Generation status
+  // Generation status & Pop-up Modal State
   const [isGenerating, setIsGenerating] = useState(false);
   const [genMeta, setGenMeta] = useState('');
   const [saveSuccessToast, setSaveSuccessToast] = useState(false);
+  const [noticeModal, setNoticeModal] = useState<{
+    isOpen: boolean;
+    type: 'success' | 'error' | 'info';
+    title: string;
+    message: string;
+  } | null>(null);
 
   // Auto-save visual status state
   const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
@@ -90,8 +203,9 @@ export const WriterView: React.FC<WriterViewProps> = ({
   // Sync state when active chapter changes
   useEffect(() => {
     if (activeChapter) {
-      setChapterTitle(activeChapter.title || '');
-      setChapterText(activeChapter.text || '');
+      const parsed = parseChapterAndSuggestions(activeChapter.text || '', activeChapter.title || `第 ${currentChapterIndex + 1} 章`);
+      setChapterTitle(activeChapter.title || parsed.title);
+      setChapterText(parsed.bodyText);
       setGenMeta(activeChapter.meta || '');
       setNextPlotInput(activeChapter.userNextPlotInput || '');
       isInitialChapterLoadRef.current = true;
@@ -327,15 +441,15 @@ export const WriterView: React.FC<WriterViewProps> = ({
       userPrompt += `\n本章核心剧情重点提示 (请优先围绕此展开)：${plotHint}\n`;
     }
 
-    userPrompt += `\n输出格式要求 (严格遵守)：
+    userPrompt += `\n输出格式规范（必须严格遵守，绝对不要遗漏分隔符）：
 ### [此处填写章节标题]
 [此处开始章节正文。请注意：在正文中绝对不要使用"---"（三个破折号）符号]
 ---
 #### 后续发展建议
-- [建议1]
-- [建议2]
-- [建议3]
-- [建议4]`;
+- [建议1：具体明确的剧情分支1]
+- [建议2：具体明确的剧情分支2]
+- [建议3：具体明确的剧情分支3]
+- [建议4：具体明确的剧情分支4]`;
 
     const messages = [
       { role: 'system' as const, content: systemPrompt },
@@ -356,16 +470,12 @@ export const WriterView: React.FC<WriterViewProps> = ({
         onChunk: (chunk) => {
           accumulatedRaw += chunk;
 
-          // Parse intermediate title & content for real-time visual streaming
-          const parts = accumulatedRaw.split('---');
-          const mainPart = parts[0] || '';
-
-          const titleMatch = mainPart.match(/###\s*(.*)/);
-          if (titleMatch) {
-            setChapterTitle(titleMatch[1].trim());
+          // Real-time clean parsing during streaming
+          const parsed = parseChapterAndSuggestions(accumulatedRaw, `第 ${chapterIndexToGen} 章`);
+          if (parsed.title) {
+            setChapterTitle(parsed.title);
           }
-          const bodyText = mainPart.replace(/###.*/, '').trim();
-          setChapterText(bodyText);
+          setChapterText(parsed.bodyText);
 
           if (contentContainerRef.current) {
             contentContainerRef.current.scrollTop = contentContainerRef.current.scrollHeight;
@@ -376,29 +486,19 @@ export const WriterView: React.FC<WriterViewProps> = ({
       const latency = Date.now() - startTime;
       const finalRaw = result.content || accumulatedRaw;
 
-      // Parse final structured contents
-      const parts = finalRaw.split('---');
-      const mainContent = parts[0] || '';
-      const suggestionsPart = parts[1] || '';
-
-      const nextOptions = (suggestionsPart.match(/[-*]\s*(.+)/g) || []).map((s) =>
-        s.replace(/[-*]\s*/, '').trim()
-      );
-
-      const titleMatch = mainContent.match(/###\s*(.*)/);
-      const finalTitle = titleMatch ? titleMatch[1].trim() : `第 ${chapterIndexToGen} 章`;
-      const finalText = mainContent.replace(/###.*/, '').trim();
-      const metaText = `模型: ${activeModelName} | 耗时: ${latency}ms | 字数: ${finalText.length}`;
+      // Robustly parse final structured contents
+      const parsed = parseChapterAndSuggestions(finalRaw, `第 ${chapterIndexToGen} 章`);
+      const metaText = `模型: ${activeModelName} | 耗时: ${latency}ms | 字数: ${parsed.bodyText.length}`;
 
       // Construct new chapter object
       const newChapter: Chapter = {
         id: crypto.randomUUID(),
         index: chapterIndexToGen,
-        title: finalTitle,
-        text: finalText,
+        title: parsed.title,
+        text: parsed.bodyText,
         meta: metaText,
         userNextPlotInput: '',
-        allSuggestions: [{ suggestions: nextOptions, timestamp: Date.now() }],
+        allSuggestions: [{ suggestions: parsed.suggestions, timestamp: Date.now() }],
       };
 
       let updatedChapters = [...currentBook.chapters];
@@ -434,9 +534,28 @@ export const WriterView: React.FC<WriterViewProps> = ({
       setNextPlotInput('');
       setGenMeta(metaText);
 
+      // Pop-up Toast Notification
+      setNoticeModal({
+        isOpen: true,
+        type: 'success',
+        title: isRewrite ? '🔄 章节重写完成！' : '🎉 章节扩写成功！',
+        message: isRewrite
+          ? `第 ${currentChapterIndex + 1} 章《${parsed.title}》已成功重写（共 ${parsed.bodyText.length} 字），旧版本已存入历史归档。`
+          : `已成功生成第 ${chapterIndexToGen} 章《${parsed.title}》（共 ${parsed.bodyText.length} 字），后续 4 条剧情建议已自动提取归入下方建议区。`,
+      });
+
     } catch (err: any) {
       console.error(err);
-      setGenMeta(`生成失败: ${err.message || '未知错误'}`);
+      const errMsg = err.message || '网络连接或 API 响应超时';
+      setGenMeta(`生成失败: ${errMsg}`);
+
+      // Error Notification Pop-up
+      setNoticeModal({
+        isOpen: true,
+        type: 'error',
+        title: isRewrite ? '❌ 重写章节失败' : '❌ 扩写章节失败',
+        message: `在进行 AI 创作时发生错误：${errMsg}。请检查 API 配置、密钥与网络环境后重试。`,
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -491,10 +610,8 @@ ${xpPreferences ? `\n# 用户偏好：\n${xpPreferences}` : ''}
         temperature: 0.9,
       });
 
-      const suggestionsPart = res.content.split('#### 后续发展建议')[1] || res.content;
-      const newOptions = (suggestionsPart.match(/[-*]\s*(.+)/g) || []).map((s) =>
-        s.replace(/[-*]\s*/, '').trim()
-      );
+      const parsed = parseChapterAndSuggestions(res.content, '建议');
+      const newOptions = parsed.suggestions;
 
       const newSuggestionsGroup = {
         suggestions: newOptions,
@@ -515,9 +632,24 @@ ${xpPreferences ? `\n# 用户偏好：\n${xpPreferences}` : ''}
       });
 
       setGenMeta(`建议重掷成功！| 模型: ${rerollModel}`);
+
+      setNoticeModal({
+        isOpen: true,
+        type: 'success',
+        title: '✨ 剧情建议重掷成功！',
+        message: '已成功为您生成 4 条全新的后续剧情灵感，并已自动归入下方的【建议组】列表中。',
+      });
     } catch (err: any) {
       console.error(err);
-      setGenMeta(`重掷建议失败: ${err.message}`);
+      const errMsg = err.message || '网络连接或 API 请求失败';
+      setGenMeta(`重掷建议失败: ${errMsg}`);
+
+      setNoticeModal({
+        isOpen: true,
+        type: 'error',
+        title: '❌ 重掷剧情建议失败',
+        message: `在重掷建议时发生错误：${errMsg}。请检查 API 设置并重试。`,
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -590,11 +722,23 @@ ${chaptersText}`;
         summaries: updatedSummaries,
       });
 
-      alert(`✅ 阶段性总结已成功生成！可在「我的书库」或弹窗中随时查阅。`);
       setGenMeta('阶段总结生成完成！');
+      setNoticeModal({
+        isOpen: true,
+        type: 'success',
+        title: '📝 阶段全局总结已生成！',
+        message: `已成功对第 1 - ${currentBook.chapters.length} 章生成全局剧情总结，您可在「我的书库」中查阅。`,
+      });
     } catch (err: any) {
       console.error(err);
-      setGenMeta(`生成总结失败: ${err.message}`);
+      const errMsg = err.message || '网络连接或 API 请求失败';
+      setGenMeta(`生成总结失败: ${errMsg}`);
+      setNoticeModal({
+        isOpen: true,
+        type: 'error',
+        title: '❌ 生成总结失败',
+        message: `在生成阶段总结时发生错误：${errMsg}。`,
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -1084,6 +1228,64 @@ ${chaptersText}`;
               >
                 <span>下一章</span>
                 <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Global Notice Toast Modal */}
+      {noticeModal && noticeModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 animate-scale-up">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {noticeModal.type === 'success' ? (
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold text-xl shrink-0">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                ) : noticeModal.type === 'error' ? (
+                  <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center font-bold text-xl shrink-0">
+                    <X className="w-6 h-6" />
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 rounded-2xl bg-sky-500/10 text-sky-500 flex items-center justify-center font-bold text-xl shrink-0">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100">
+                    {noticeModal.title}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    实时创作反馈通知
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setNoticeModal(null)}
+                className="p-1 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800 text-xs sm:text-sm text-slate-700 dark:text-slate-200 leading-relaxed max-h-48 overflow-y-auto">
+              {noticeModal.message}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setNoticeModal(null)}
+                className={`px-6 py-2.5 rounded-xl text-white font-semibold text-xs sm:text-sm transition-all shadow-md active:scale-95 ${
+                  noticeModal.type === 'success'
+                    ? 'bg-emerald-500 hover:bg-emerald-600 shadow-emerald-500/20'
+                    : noticeModal.type === 'error'
+                    ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-500/20'
+                    : 'bg-sky-500 hover:bg-sky-600 shadow-sky-500/20'
+                }`}
+              >
+                好的，我知道了
               </button>
             </div>
           </div>

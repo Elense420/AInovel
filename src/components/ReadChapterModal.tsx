@@ -54,14 +54,24 @@ export const ReadChapterModal: React.FC<ReadChapterModalProps> = ({
           </div>
 
           {/* User's Next Plot Hint if saved */}
-          {chapter.userNextPlotInput && chapter.userNextPlotInput.trim() !== '' && (
-            <div className="p-4 rounded-2xl border border-sky-500/20 bg-sky-500/5 dark:bg-sky-500/10 space-y-1">
+          {chapter.userNextPlotInput && chapter.userNextPlotInput.trim() !== '' ? (
+            <div className="p-4 rounded-2xl border border-sky-500/20 bg-sky-500/5 dark:bg-sky-500/10 space-y-1.5">
               <div className="text-xs font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5" />
                 <span>用户为此章指定的下一章走向 (已保存)</span>
               </div>
-              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+              <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
                 {chapter.userNextPlotInput}
+              </p>
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 space-y-1">
+              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 opacity-60" />
+                <span>用户为此章指定的下一章走向 (已保存)</span>
+              </div>
+              <p className="text-xs text-slate-400 dark:text-slate-500 italic">
+                （此章节尚未提交或指定自定义的下一章剧情走向）
               </p>
             </div>
           )}

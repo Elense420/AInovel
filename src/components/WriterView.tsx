@@ -519,6 +519,13 @@ export const WriterView: React.FC<WriterViewProps> = ({
         updatedChapters = updatedChapters.slice(0, currentChapterIndex);
         updatedChapters.push(newChapter);
       } else {
+        // Save user's plotHint into previous chapter's userNextPlotInput if present
+        if (updatedChapters.length > 0) {
+          const prevCh = updatedChapters[updatedChapters.length - 1];
+          if (prevCh && (plotHint || nextPlotInput)) {
+            prevCh.userNextPlotInput = (plotHint || nextPlotInput).trim();
+          }
+        }
         updatedChapters.push(newChapter);
       }
 

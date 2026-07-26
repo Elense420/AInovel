@@ -609,9 +609,9 @@ ${chaptersText}`;
       </div>
 
       {/* Writer Header and Controls */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl space-y-6">
+      <div className="glass-panel p-4 sm:p-8 rounded-2xl sm:rounded-3xl space-y-4 sm:space-y-6">
         {/* Title and Active Route info */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800 pb-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/60 dark:border-slate-800 pb-3 sm:pb-4">
           <div className="flex-1 space-y-1">
             <input
               type="text"
@@ -619,88 +619,88 @@ ${chaptersText}`;
               onChange={(e) => setChapterTitle(e.target.value)}
               disabled={!isEditMode}
               placeholder="章节标题..."
-              className={`w-full text-xl sm:text-2xl font-bold bg-transparent text-slate-800 dark:text-slate-100 focus:outline-hidden ${
+              className={`w-full text-lg sm:text-2xl font-bold bg-transparent text-slate-800 dark:text-slate-100 focus:outline-hidden ${
                 isEditMode ? 'border-b-2 border-emerald-500/50 focus:border-emerald-500' : ''
               }`}
             />
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
+          <div className="flex items-center gap-2 shrink-0 self-start md:self-auto">
             {/* Auto-save Status Indicator */}
             {autoSaveStatus === 'saving' ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-semibold animate-pulse">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-semibold animate-pulse">
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
                 <span>保存中...</span>
               </div>
             ) : showAutoSaveToast || autoSaveStatus === 'saved' ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold animate-fade-in">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold animate-fade-in">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
                 <span>已自动保存</span>
               </div>
             ) : null}
 
-            <div className="text-xs px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-              线路: <span className="font-semibold text-slate-700 dark:text-slate-200">{writerCfg?.name}</span> | 模型: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{activeModelName}</span>
+            <div className="text-[11px] sm:text-xs px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 truncate max-w-[200px] sm:max-w-none">
+              线路: <span className="font-semibold text-slate-700 dark:text-slate-200">{writerCfg?.name}</span> | <span className="font-semibold text-emerald-600 dark:text-emerald-400">{activeModelName}</span>
             </div>
           </div>
         </div>
 
         {/* Word count & Actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
-          <div className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-            <span>📊 全书总字数:</span>
+        <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs sm:text-sm">
+          <div className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <span>📊 全书字数:</span>
             <span className="text-emerald-600 dark:text-emerald-400 font-bold">{totalWordCount.toLocaleString()}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 w-full sm:w-auto">
             <button
               onClick={() => setIsEditMode(!isEditMode)}
-              className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center gap-1.5"
+              className="flex-1 sm:flex-none px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
             >
-              {isEditMode ? <Eye className="w-4 h-4 text-emerald-500" /> : <Edit3 className="w-4 h-4 text-slate-500" />}
-              <span>{isEditMode ? '切换到阅读模式' : '切换到编辑模式'}</span>
+              {isEditMode ? <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" /> : <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />}
+              <span>{isEditMode ? '阅读模式' : '编辑模式'}</span>
             </button>
 
             {isEditMode && (
               <button
                 onClick={handleSaveChapterEdits}
-                className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium shadow-md shadow-emerald-500/20 transition-colors flex items-center gap-1.5"
+                className="flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium shadow-md shadow-emerald-500/20 transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
               >
-                {saveSuccessToast ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
-                <span>{saveSuccessToast ? '保存成功！' : '💾 保存当前章节'}</span>
+                {saveSuccessToast ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                <span>{saveSuccessToast ? '已保存' : '保存章节'}</span>
               </button>
             )}
 
             <button
               onClick={handleGenerateSummary}
-              className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center gap-1.5"
+              className="flex-1 sm:flex-none px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
             >
-              <Sparkles className="w-4 h-4 text-purple-500" />
-              <span>📝 生成阶段总结</span>
+              <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-500" />
+              <span>生成总结</span>
             </button>
           </div>
         </div>
 
         {/* Chapter Navigation bar */}
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-3 p-2.5 sm:p-3 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/50 dark:border-slate-800">
           <button
             disabled={currentChapterIndex <= 0 || isGenerating}
             onClick={() => setCurrentChapterIndex((prev) => Math.max(0, prev - 1))}
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1 hover:bg-slate-100 transition-colors"
+            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1 hover:bg-slate-100 transition-colors shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>上一章</span>
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">上一章</span>
           </button>
 
-          <div className="flex items-center gap-3">
-            <span className="font-bold text-slate-800 dark:text-slate-200 text-xs sm:text-sm">
-              第 {currentChapterIndex + 1} / {currentBook.chapters.length} 章
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+            <span className="font-bold text-slate-800 dark:text-slate-200 text-xs sm:text-sm shrink-0">
+              {currentChapterIndex + 1} / {currentBook.chapters.length} 章
             </span>
 
             <select
               value={currentChapterIndex}
               onChange={(e) => setCurrentChapterIndex(Number(e.target.value))}
-              className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs cursor-pointer"
+              className="max-w-[110px] sm:max-w-xs truncate px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs cursor-pointer"
             >
               {currentBook.chapters.map((ch, idx) => (
                 <option key={ch.id} value={idx}>
@@ -713,16 +713,16 @@ ${chaptersText}`;
           <button
             disabled={currentChapterIndex >= currentBook.chapters.length - 1 || isGenerating}
             onClick={() => setCurrentChapterIndex((prev) => Math.min(currentBook.chapters.length - 1, prev + 1))}
-            className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1 hover:bg-slate-100 transition-colors"
+            className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 disabled:opacity-40 text-slate-700 dark:text-slate-200 text-xs font-medium flex items-center gap-1 hover:bg-slate-100 transition-colors shrink-0"
           >
-            <span>下一章</span>
-            <ArrowRight className="w-4 h-4" />
+            <span className="hidden sm:inline">下一章</span>
+            <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
         </div>
 
         {/* Gen Meta bar */}
         {genMeta && (
-          <div className="text-xs px-3.5 py-2 rounded-xl bg-slate-100/80 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 font-mono">
+          <div className="text-xs px-3 py-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-900/60 text-slate-500 dark:text-slate-400 font-mono overflow-x-auto">
             {genMeta}
           </div>
         )}
@@ -730,7 +730,7 @@ ${chaptersText}`;
         {/* Chapter Main Writing/Reading Canvas */}
         <div
           ref={contentContainerRef}
-          className="relative min-h-[300px] max-h-[60vh] overflow-y-auto p-6 sm:p-8 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shadow-inner group"
+          className="relative min-h-[220px] sm:min-h-[300px] max-h-[60vh] overflow-y-auto p-4 sm:p-8 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shadow-inner group"
         >
           {/* Top-Right Floating Auto-Save Status Indicator */}
           <div className="sticky top-0 float-right z-20 ml-4 mb-2 pointer-events-none select-none">

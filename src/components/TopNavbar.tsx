@@ -32,27 +32,27 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-50 transition-all duration-300 backdrop-blur-2xl bg-white/40 dark:bg-slate-900/50 border-b border-white/40 dark:border-slate-800/80 shadow-lg shadow-purple-200/20 dark:shadow-none">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
         {/* Brand */}
         <div
           onClick={() => setActiveTab('novels')}
-          className="flex items-center gap-2.5 cursor-pointer group shrink-0"
+          className="flex items-center gap-2 cursor-pointer group shrink-0"
         >
           <div
-            className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-black/5 group-hover:scale-105 transition-transform duration-200"
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl sm:rounded-2xl flex items-center justify-center text-white shadow-lg shadow-black/5 group-hover:scale-105 transition-transform duration-200"
             style={{ background: 'var(--accent-gradient)' }}
           >
-            <Sparkles className="w-5 h-5 animate-pulse-glow" />
+            <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 animate-pulse-glow" />
           </div>
           <div>
             <span
-              className="text-xl font-extrabold bg-clip-text text-transparent"
+              className="text-base sm:text-xl font-extrabold bg-clip-text text-transparent"
               style={{ backgroundImage: 'var(--accent-gradient)' }}
             >
               AI 小说家
             </span>
             <span
-              className="hidden sm:inline-block ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full border"
+              className="hidden md:inline-block ml-2 text-xs font-semibold px-2 py-0.5 rounded-full border"
               style={{
                 backgroundColor: 'var(--accent-light)',
                 color: 'var(--accent)',
@@ -65,7 +65,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </div>
 
         {/* Tab Buttons */}
-        <nav className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none no-scrollbar">
+        <nav className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto py-1 scrollbar-none no-scrollbar max-w-[55vw] sm:max-w-none">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
@@ -74,13 +74,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
                 style={isActive ? { background: 'var(--accent-gradient)' } : {}}
-                className={`relative flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-semibold transition-all duration-200 shrink-0 select-none ${
+                className={`relative flex items-center gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-semibold transition-all duration-200 shrink-0 select-none ${
                   isActive
                     ? 'text-white shadow-md shadow-black/10'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-800/60'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : ''}`} />
+                <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isActive ? 'text-white' : ''}`} />
                 <span>{item.label}</span>
               </button>
             );
@@ -88,13 +88,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
         </nav>
 
         {/* Right actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={toggleDarkMode}
             title={uiSettings.mode === 'dark' ? '切换浅色模式' : '切换深色模式'}
-            className="p-2.5 rounded-2xl bg-white/50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-all border border-white/60 dark:border-slate-700/60 shadow-xs"
+            className="p-2 sm:p-2.5 rounded-xl sm:rounded-2xl bg-white/50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 transition-all border border-white/60 dark:border-slate-700/60 shadow-xs"
           >
-            {uiSettings.mode === 'dark' ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5 text-indigo-600" />}
+            {uiSettings.mode === 'dark' ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />}
           </button>
         </div>
       </div>

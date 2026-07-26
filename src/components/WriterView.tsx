@@ -25,6 +25,7 @@ import {
   Sun,
   Moon,
   BookOpenText,
+  Zap,
 } from 'lucide-react';
 import { Book, Chapter, UiSettings, ApiConfig } from '../types';
 import { streamChatCompletion, chatCompletion } from '../services/apiClient';
@@ -422,6 +423,17 @@ export const WriterView: React.FC<WriterViewProps> = ({
           if (entry.behaviorQuirks) systemPrompt += ` 癖好/语气: ${entry.behaviorQuirks} |`;
           if (entry.mustIncludeTaboos) systemPrompt += ` 必写/禁忌: ${entry.mustIncludeTaboos}`;
           systemPrompt += `\n`;
+        });
+      }
+    }
+
+    // Skills prompt injection
+    if (currentBook.settings?.skills) {
+      const activeSkills = currentBook.settings.skills.filter((s) => s.enabled);
+      if (activeSkills.length > 0) {
+        systemPrompt += `\n\n# 🎯 写作 SKILL 技能与文风规范 (高优先级法则 - 必须严格遵守)\n`;
+        activeSkills.forEach((sk, idx) => {
+          systemPrompt += `${idx + 1}. 【${sk.name}】: ${sk.promptInstruction}\n`;
         });
       }
     }
@@ -834,6 +846,45 @@ ${chaptersText}`;
             </div>
           </div>
         </div>
+
+        {/* Active SKILLs Visual Indicator Bar */}
+        {(() => {
+          const activeSkills = currentBook.settings?.skills?.filter((s) => s.enabled) || [];
+          return (
+            <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 sm:p-3 rounded-2xl bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/25 text-xs shadow-2xs">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                <div className="flex items-center gap-1.5 font-bold text-cyan-700 dark:text-cyan-300 shrink-0">
+                  <Zap className="w-4 h-4 text-cyan-500 fill-cyan-500/20 animate-pulse" />
+                  <span>当前生效 SKILL 技能 ({activeSkills.length}):</span>
+                </div>
+                {activeSkills.length > 0 ? (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {activeSkills.map((sk) => (
+                      <span
+                        key={sk.id}
+                        title={`【规则规则指令】:\n${sk.promptInstruction}`}
+                        className="px-2.5 py-0.5 rounded-lg bg-white/90 dark:bg-slate-800/90 text-cyan-800 dark:text-cyan-200 border border-cyan-500/30 font-medium text-[11px] flex items-center gap-1 shadow-2xs cursor-help hover:border-cyan-400 transition-colors"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping shrink-0" />
+                        <span className="truncate max-w-[150px]">{sk.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-slate-500 dark:text-slate-400 text-xs italic">
+                    暂未激活任何 SKILL 指令（在【写作设定】中可随时开启或自创技能）
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={onGoToSetup}
+                className="text-[11px] font-semibold text-cyan-600 dark:text-cyan-400 hover:text-cyan-700 dark:hover:text-cyan-300 flex items-center gap-1 shrink-0 ml-auto transition-colors"
+              >
+                <span>⚙️ 管理 SKILL</span>
+              </button>
+            </div>
+          );
+        })()}
 
         {/* Word count & Actions */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 text-xs sm:text-sm">

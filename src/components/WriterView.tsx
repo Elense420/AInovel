@@ -1,5 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChevronDown, ChevronUp, Edit3, Eye, Save, Sparkles, RefreshCw, Trash2, ArrowLeft, ArrowRight, Play, AlertCircle, FileText, Check } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronUp,
+  Edit3,
+  Eye,
+  Save,
+  Sparkles,
+  RefreshCw,
+  Trash2,
+  ArrowLeft,
+  ArrowRight,
+  Play,
+  AlertCircle,
+  FileText,
+  Check,
+  Loader2,
+  CheckCircle2,
+  CloudCheck,
+} from 'lucide-react';
 import { Book, Chapter, UiSettings, ApiConfig } from '../types';
 import { streamChatCompletion, chatCompletion } from '../services/apiClient';
 
@@ -42,6 +60,13 @@ export const WriterView: React.FC<WriterViewProps> = ({
   const [genMeta, setGenMeta] = useState('');
   const [saveSuccessToast, setSaveSuccessToast] = useState(false);
 
+  // Auto-save visual status state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [showAutoSaveToast, setShowAutoSaveToast] = useState(false);
+  const [lastAutoSavedTime, setLastAutoSavedTime] = useState('');
+
+  const isInitialChapterLoadRef = useRef(true);
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const contentContainerRef = useRef<HTMLDivElement>(null);
 
@@ -55,13 +80,72 @@ export const WriterView: React.FC<WriterViewProps> = ({
       setChapterText(activeChapter.text || '');
       setGenMeta(activeChapter.meta || '');
       setNextPlotInput(activeChapter.userNextPlotInput || '');
+      isInitialChapterLoadRef.current = true;
+      setAutoSaveStatus('idle');
+      setShowAutoSaveToast(false);
     } else {
       setChapterTitle('');
       setChapterText('');
       setGenMeta('');
       setNextPlotInput('');
     }
-  }, [activeChapter, currentChapterIndex]);
+  }, [currentChapterIndex, currentBook?.id]);
+
+  // Debounced auto-save effect
+  useEffect(() => {
+    if (!currentBook || !activeChapter) return;
+
+    // Skip auto-save on initial chapter selection
+    if (isInitialChapterLoadRef.current) {
+      isInitialChapterLoadRef.current = false;
+      return;
+    }
+
+    // Skip during active AI generation streaming
+    if (isGenerating) return;
+
+    // Check if there is actual content change compared to activeChapter
+    const titleChanged = chapterTitle !== (activeChapter.title || '');
+    const textChanged = chapterText !== (activeChapter.text || '');
+
+    if (!titleChanged && !textChanged) return;
+
+    setAutoSaveStatus('saving');
+
+    const timer = setTimeout(async () => {
+      try {
+        const updatedChapters = [...currentBook.chapters];
+        const target = updatedChapters[currentChapterIndex];
+
+        if (target) {
+          target.title = chapterTitle.trim();
+          target.text = chapterText.trim();
+          target.meta = `自动保存于 ${new Date().toLocaleTimeString()}`;
+
+          const updatedBook: Book = {
+            ...currentBook,
+            chapters: updatedChapters,
+            lastModifiedAt: Date.now(),
+          };
+
+          await onSaveBook(updatedBook); // Triggers dbPut!
+          const saveTime = new Date().toLocaleTimeString();
+          setLastAutoSavedTime(saveTime);
+          setAutoSaveStatus('saved');
+          setShowAutoSaveToast(true);
+
+          setTimeout(() => {
+            setShowAutoSaveToast(false);
+          }, 2500);
+        }
+      } catch (err) {
+        console.error('Auto save error:', err);
+        setAutoSaveStatus('idle');
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [chapterTitle, chapterText]);
 
   if (!currentBook || currentBook.chapters.length === 0) {
     return (
@@ -115,8 +199,15 @@ export const WriterView: React.FC<WriterViewProps> = ({
       };
 
       await onSaveBook(updatedBook);
+      const timeStr = new Date().toLocaleTimeString();
+      setLastAutoSavedTime(timeStr);
+      setAutoSaveStatus('saved');
+      setShowAutoSaveToast(true);
       setSaveSuccessToast(true);
-      setTimeout(() => setSaveSuccessToast(false), 2000);
+      setTimeout(() => {
+        setSaveSuccessToast(false);
+        setShowAutoSaveToast(false);
+      }, 2500);
     }
   };
 
@@ -534,8 +625,23 @@ ${chaptersText}`;
             />
           </div>
 
-          <div className="text-xs px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 shrink-0 self-start md:self-auto">
-            线路: <span className="font-semibold text-slate-700 dark:text-slate-200">{writerCfg?.name}</span> | 模型: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{activeModelName}</span>
+          <div className="flex items-center gap-2.5 shrink-0 self-start md:self-auto">
+            {/* Auto-save Status Indicator */}
+            {autoSaveStatus === 'saving' ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-semibold animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                <span>保存中...</span>
+              </div>
+            ) : showAutoSaveToast || autoSaveStatus === 'saved' ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-semibold animate-fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span>已自动保存</span>
+              </div>
+            ) : null}
+
+            <div className="text-xs px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              线路: <span className="font-semibold text-slate-700 dark:text-slate-200">{writerCfg?.name}</span> | 模型: <span className="font-semibold text-emerald-600 dark:text-emerald-400">{activeModelName}</span>
+            </div>
           </div>
         </div>
 
@@ -624,8 +730,27 @@ ${chaptersText}`;
         {/* Chapter Main Writing/Reading Canvas */}
         <div
           ref={contentContainerRef}
-          className="relative min-h-[300px] max-h-[60vh] overflow-y-auto p-6 sm:p-8 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shadow-inner"
+          className="relative min-h-[300px] max-h-[60vh] overflow-y-auto p-6 sm:p-8 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 shadow-inner group"
         >
+          {/* Top-Right Floating Auto-Save Status Indicator */}
+          <div className="sticky top-0 float-right z-20 ml-4 mb-2 pointer-events-none select-none">
+            {autoSaveStatus === 'saving' ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 backdrop-blur-md text-amber-700 dark:text-amber-300 border border-amber-500/30 text-xs font-semibold shadow-md animate-pulse">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                <span>正在保存...</span>
+              </div>
+            ) : showAutoSaveToast || autoSaveStatus === 'saved' ? (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 backdrop-blur-md text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 text-xs font-semibold shadow-md animate-fade-in">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                <span>已自动保存 {lastAutoSavedTime && `(${lastAutoSavedTime})`}</span>
+              </div>
+            ) : (
+              <div className="opacity-0 group-hover:opacity-70 transition-opacity flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-200/80 dark:bg-slate-800/80 backdrop-blur-md text-slate-600 dark:text-slate-300 text-[11px] font-medium border border-slate-300/50 dark:border-slate-700/50">
+                <CloudCheck className="w-3.5 h-3.5 text-emerald-500" />
+                <span>自动保存开启</span>
+              </div>
+            )}
+          </div>
           {isEditMode ? (
             <textarea
               value={chapterText}

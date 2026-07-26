@@ -38,14 +38,27 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
           onClick={() => setActiveTab('novels')}
           className="flex items-center gap-2.5 cursor-pointer group shrink-0"
         >
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-indigo-200 dark:shadow-none group-hover:scale-105 transition-transform duration-200">
+          <div
+            className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-black/5 group-hover:scale-105 transition-transform duration-200"
+            style={{ background: 'var(--accent-gradient)' }}
+          >
             <Sparkles className="w-5 h-5 animate-pulse-glow" />
           </div>
           <div>
-            <span className="text-xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 dark:from-indigo-400 dark:via-purple-300 dark:to-pink-400 bg-clip-text text-transparent">
+            <span
+              className="text-xl font-extrabold bg-clip-text text-transparent"
+              style={{ backgroundImage: 'var(--accent-gradient)' }}
+            >
               AI 小说家
             </span>
-            <span className="hidden sm:inline-block ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
+            <span
+              className="hidden sm:inline-block ml-2 text-xs font-semibold px-2.5 py-0.5 rounded-full border"
+              style={{
+                backgroundColor: 'var(--accent-light)',
+                color: 'var(--accent)',
+                borderColor: 'var(--accent)',
+              }}
+            >
               v5.3 Pro
             </span>
           </div>
@@ -60,10 +73,11 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
+                style={isActive ? { background: 'var(--accent-gradient)' } : {}}
                 className={`relative flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-semibold transition-all duration-200 shrink-0 select-none ${
                   isActive
-                    ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-md shadow-indigo-200 dark:shadow-none'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-800/60'
+                    ? 'text-white shadow-md shadow-black/10'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-slate-800/60'
                 }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : ''}`} />

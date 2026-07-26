@@ -112,7 +112,7 @@ export default function App() {
     } else {
       root.classList.remove('dark');
     }
-    root.setAttribute('data-theme', uiSettings.theme || 'green');
+    root.setAttribute('data-theme', uiSettings.theme || 'indigo');
     root.style.setProperty('--chapter-content-font-size', uiSettings.chapterFontSize || '1.05rem');
   }, [uiSettings]);
 
@@ -245,11 +245,25 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#E0F2FE] via-[#F5F3FF] to-[#FCE7F3] dark:from-[#0B132B] dark:via-[#1C2541] dark:to-[#1E1B4B] text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-300">
+    <div
+      className="min-h-screen text-slate-800 dark:text-slate-100 flex flex-col font-sans transition-colors duration-500"
+      style={{
+        backgroundImage: uiSettings.mode === 'dark' ? 'var(--bg-gradient-dark)' : 'var(--bg-gradient-light)',
+      }}
+    >
       {/* Dynamic ambient background glow */}
-      <div className="fixed top-0 left-1/4 w-[28rem] h-[28rem] bg-indigo-500/15 dark:bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -z-10 animate-pulse-glow" />
-      <div className="fixed bottom-0 right-1/4 w-[28rem] h-[28rem] bg-purple-500/15 dark:bg-purple-500/10 rounded-full blur-3xl pointer-events-none -z-10 animate-pulse-glow" />
-      <div className="fixed top-1/3 right-10 w-80 h-80 bg-pink-400/10 dark:bg-pink-500/10 rounded-full blur-3xl pointer-events-none -z-10" />
+      <div
+        className="fixed top-0 left-1/4 w-[28rem] h-[28rem] rounded-full blur-3xl pointer-events-none -z-10 animate-pulse-glow transition-colors duration-500"
+        style={{ backgroundColor: 'var(--glow-1)' }}
+      />
+      <div
+        className="fixed bottom-0 right-1/4 w-[28rem] h-[28rem] rounded-full blur-3xl pointer-events-none -z-10 animate-pulse-glow transition-colors duration-500"
+        style={{ backgroundColor: 'var(--glow-2)' }}
+      />
+      <div
+        className="fixed top-1/3 right-10 w-80 h-80 rounded-full blur-3xl pointer-events-none -z-10 transition-colors duration-500"
+        style={{ backgroundColor: 'var(--glow-1)', opacity: 0.5 }}
+      />
 
       {/* Top Navbar */}
       <TopNavbar

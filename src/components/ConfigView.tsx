@@ -605,29 +605,42 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           {/* Theme switcher */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-              主题调色盘
+          <div className="col-span-1 sm:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-3">
+              主题调色盘 (点击即刻实时切换应用外观)
             </label>
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-3">
               {[
-                { id: 'green', color: '#10b981', label: '淡墨绿' },
-                { id: 'pink', color: '#f43f5e', label: '淡粉色' },
-                { id: 'blue', color: '#0284c7', label: '淡蓝色' },
-                { id: 'yellow', color: '#d97706', label: '淡黄色' },
-                { id: 'purple', color: '#8b5cf6', label: '淡紫色' },
-                { id: 'white', color: '#64748b', label: '纯粹白' },
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => updateUiSettingsKey('theme', t.id)}
-                  title={t.label}
-                  className={`w-7 h-7 rounded-full transition-transform ${
-                    uiSettings.theme === t.id ? 'scale-125 ring-2 ring-emerald-500 ring-offset-2' : 'hover:scale-110'
-                  }`}
-                  style={{ backgroundColor: t.color }}
-                />
-              ))}
+                { id: 'indigo', color: '#6366f1', gradient: 'from-indigo-500 via-purple-500 to-pink-500', label: '极光靛紫' },
+                { id: 'green', color: '#10b981', gradient: 'from-emerald-500 to-teal-600', label: '翡翠竹青' },
+                { id: 'pink', color: '#f43f5e', gradient: 'from-rose-500 to-pink-500', label: '浪漫樱粉' },
+                { id: 'blue', color: '#0284c7', gradient: 'from-sky-500 to-indigo-600', label: '琥珀蔚蓝' },
+                { id: 'yellow', color: '#d97706', gradient: 'from-amber-500 to-red-500', label: '暖阳金辉' },
+                { id: 'purple', color: '#8b5cf6', gradient: 'from-purple-500 to-fuchsia-500', label: '幻彩魅紫' },
+                { id: 'white', color: '#64748b', gradient: 'from-slate-500 to-slate-700', label: '极简素雅' },
+              ].map((t) => {
+                const isSelected = uiSettings.theme === t.id || (!uiSettings.theme && t.id === 'indigo');
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => updateUiSettingsKey('theme', t.id)}
+                    title={t.label}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-2xl text-xs font-medium transition-all duration-200 border cursor-pointer select-none ${
+                      isSelected
+                        ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600 shadow-md ring-2 ring-indigo-500/50 scale-105'
+                        : 'bg-white/50 dark:bg-slate-800/40 text-slate-600 dark:text-slate-300 border-slate-200/60 dark:border-slate-800 hover:bg-white dark:hover:bg-slate-800 hover:scale-102'
+                    }`}
+                  >
+                    <span
+                      className={`w-4 h-4 rounded-full bg-gradient-to-r ${t.gradient} shadow-xs shrink-0`}
+                    />
+                    <span>{t.label}</span>
+                    {isSelected && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 dark:bg-indigo-400 ml-0.5" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 

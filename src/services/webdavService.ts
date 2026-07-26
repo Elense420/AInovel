@@ -1,24 +1,42 @@
 import { WebdavConfig } from '../types';
 import { exportAllAppData, importAllAppData } from './db';
 
+async function safeFetchJson(url: string, options: RequestInit) {
+  let res: Response;
+  try {
+    res = await fetch(url, options);
+  } catch (err: any) {
+    throw new Error(`网络请求失败，无法连接至后端服务器: ${err.message || err}`);
+  }
+
+  const text = await res.text();
+  let data: any = {};
+  try {
+    data = JSON.parse(text);
+  } catch (e) {
+    throw new Error(
+      `服务器未返回有效 JSON 格式数据 (${res.status} ${res.statusText})。请检查后端服务是否正在运行。`
+    );
+  }
+
+  if (!res.ok) {
+    throw new Error(data.error || `请求失败 (${res.status})`);
+  }
+  return data;
+}
+
 export async function testWebdavConnection(config: WebdavConfig) {
-  const res = await fetch('/api/webdav/test', {
+  return await safeFetchJson('/api/webdav/test', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || '测试 WebDAV 连接失败');
-  }
-  return data;
 }
 
 export async function backupToWebdav(config: WebdavConfig, customName?: string) {
   const backupData = await exportAllAppData();
 
-  const res = await fetch('/api/webdav/backup', {
+  return await safeFetchJson('/api/webdav/backup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -27,26 +45,16 @@ export async function backupToWebdav(config: WebdavConfig, customName?: string) 
       customName,
     }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'WebDAV 备份失败');
-  }
-  return data;
 }
 
 export async function listWebdavBackups(config: WebdavConfig) {
-  const res = await fetch('/api/webdav/list', {
+  const data = await safeFetchJson('/api/webdav/list', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   });
 
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || '获取 WebDAV 备份列表失败');
-  }
-  return data.files as Array<{
+  return (data.files || []) as Array<{
     basename: string;
     filename: string;
     size: number;
@@ -55,7 +63,7 @@ export async function listWebdavBackups(config: WebdavConfig) {
 }
 
 export async function restoreFromWebdav(config: WebdavConfig, fileName: string) {
-  const res = await fetch('/api/webdav/restore', {
+  const data = await safeFetchJson('/api/webdav/restore', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -63,11 +71,6 @@ export async function restoreFromWebdav(config: WebdavConfig, fileName: string) 
       fileName,
     }),
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.error || 'WebDAV 恢复数据失败');
-  }
 
   if (!data.backupData) {
     throw new Error('未获取到有效的备份数据');
@@ -78,3 +81,4 @@ export async function restoreFromWebdav(config: WebdavConfig, fileName: string) 
 
   return data;
 }
+

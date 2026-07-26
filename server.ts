@@ -1,31 +1,33 @@
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
-import app from './src/server/app';
+import dotenv from 'dotenv';
+import { handleChatCompletionRequest, handleModelsRequest } from './src/server/aiRouter';
 
-async function startServer() {
-  const PORT = 3000;
+dotenv.config();
 
-  // Serve Vite in dev or static files in production
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json({ limit: '10mb' }));
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', serverTime: new Date().toISOString() });
+});
+
+app.get('/api/ai/models', handleModelsRequest as any);
+app.post('/api/ai/chat', handleChatCompletionRequest as any);
+
+// Serve static assets from dist
+const distPath = path.join(process.cwd(), 'dist');
+app.use(express.static(distPath));
+
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'Endpoint not found' });
   }
+  res.sendFile(path.join(distPath, 'index.html'));
+});
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`AI Novelist server running on http://0.0.0.0:${PORT}`);
-  });
-}
-
-startServer();
-
-
+app.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
+});

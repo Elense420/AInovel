@@ -1,7 +1,7 @@
-import { Book, ApiConfig, InspirationRecord, UiSettings, HistoryItem } from '../types';
+import { Book, ApiConfig, InspirationRecord, UiSettings, HistoryItem, NovelSkill, DEFAULT_PRESET_SKILLS } from '../types';
 
 const DB_NAME = 'aiNovelistDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORE_NAMES = {
   BOOKS: 'books',
@@ -13,6 +13,7 @@ export const STORE_NAMES = {
   XP_PREFERENCES: 'xpPreferences',
   XP_PREFERENCES_HISTORY: 'xpPreferencesHistory',
   INSPIRATION_RECORDS: 'inspirationRecords',
+  NOVEL_SKILLS: 'novelSkills',
 } as const;
 
 let dbInstance: IDBDatabase | null = null;
@@ -301,4 +302,39 @@ export async function seedInitialDataIfEmpty() {
     };
     await dbPut(STORE_NAMES.INSPIRATION_RECORDS, sampleInspiration);
   }
+
+  // Seed default skills if empty
+  const existingSkills = await dbGetAll<NovelSkill>(STORE_NAMES.NOVEL_SKILLS);
+  if (existingSkills.length === 0) {
+    for (const s of DEFAULT_PRESET_SKILLS) {
+      await dbPut(STORE_NAMES.NOVEL_SKILLS, s);
+    }
+  }
+}
+
+export async function getGlobalSkills(): Promise<NovelSkill[]> {
+  const list = await dbGetAll<NovelSkill>(STORE_NAMES.NOVEL_SKILLS);
+  if (!list || list.length === 0) {
+    for (const s of DEFAULT_PRESET_SKILLS) {
+      await dbPut(STORE_NAMES.NOVEL_SKILLS, s);
+    }
+    return DEFAULT_PRESET_SKILLS;
+  }
+  return list;
+}
+
+export async function saveGlobalSkill(skill: NovelSkill): Promise<void> {
+  await dbPut(STORE_NAMES.NOVEL_SKILLS, skill);
+}
+
+export async function deleteGlobalSkill(skillId: string): Promise<void> {
+  await dbDelete(STORE_NAMES.NOVEL_SKILLS, skillId);
+}
+
+export async function resetGlobalSkills(): Promise<NovelSkill[]> {
+  await dbClear(STORE_NAMES.NOVEL_SKILLS);
+  for (const s of DEFAULT_PRESET_SKILLS) {
+    await dbPut(STORE_NAMES.NOVEL_SKILLS, s);
+  }
+  return DEFAULT_PRESET_SKILLS;
 }

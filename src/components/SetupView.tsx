@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Save, Upload, Trash2, RotateCcw, BookOpen, Layers, UserCheck, Compass, Sliders, Wand2, FileText, Plus, Edit3, X, Check, BookMarked, HeartHandshake, Zap, ShieldAlert, Cpu } from 'lucide-react';
 import { Book, BookSettings, UiSettings, ApiConfig, HistoryItem, LorebookEntry, NovelSkill, DEFAULT_PRESET_SKILLS } from '../types';
-import { dbPut, dbGetAll, dbDelete, STORE_NAMES } from '../services/db';
+import { dbPut, dbGetAll, dbDelete, STORE_NAMES, getGlobalSkills, saveGlobalSkill, deleteGlobalSkill, resetGlobalSkills } from '../services/db';
 import { chatCompletion } from '../services/apiClient';
 
 interface SetupViewProps {
@@ -73,6 +73,12 @@ export const SetupView: React.FC<SetupViewProps> = ({
 
   // Sync state when currentBook changes
   useEffect(() => {
+    syncBookAndGlobalSkills();
+  }, [currentBook]);
+
+  const syncBookAndGlobalSkills = async () => {
+    const globalList = await getGlobalSkills();
+
     if (currentBook) {
       setTitle(currentBook.title || '');
       const s = currentBook.settings || {};
@@ -89,9 +95,18 @@ export const SetupView: React.FC<SetupViewProps> = ({
       setOutline(s.outline || '');
       setStyleReference(s.styleReference || '');
       setLorebook(s.lorebook || []);
-      setSkills(s.skills && s.skills.length > 0 ? s.skills : DEFAULT_PRESET_SKILLS);
+
+      const bookSkills = s.skills || [];
+      const bookSkillsMap = new Map(bookSkills.map((bs) => [bs.id, bs.enabled]));
+      const merged = globalList.map((g) => ({
+        ...g,
+        enabled: bookSkillsMap.has(g.id) ? !!bookSkillsMap.get(g.id) : g.enabled,
+      }));
+      setSkills(merged);
+    } else {
+      setSkills(globalList);
     }
-  }, [currentBook]);
+  };
 
   // Load histories
   useEffect(() => {
@@ -203,50 +218,46 @@ export const SetupView: React.FC<SetupViewProps> = ({
     setIsSkillModalOpen(true);
   };
 
-  const handleSaveSkill = () => {
+  const handleSaveSkill = async () => {
     if (!skillName.trim() || !skillInstruction.trim()) {
       alert('请填写技能名称与具体的 AI 指令规则');
       return;
     }
 
-    if (editingSkill) {
-      setSkills((prev) =>
-        prev.map((s) =>
-          s.id === editingSkill.id
-            ? {
-                ...s,
-                name: skillName.trim(),
-                description: skillDesc.trim(),
-                promptInstruction: skillInstruction.trim(),
-                category: skillCategory,
-              }
-            : s
-        )
-      );
-    } else {
-      const newSkill: NovelSkill = {
-        id: `skill-custom-${crypto.randomUUID()}`,
-        name: skillName.trim(),
-        description: skillDesc.trim() || skillName.trim(),
-        promptInstruction: skillInstruction.trim(),
-        category: skillCategory,
-        enabled: true,
-        isPreset: false,
-      };
-      setSkills((prev) => [...prev, newSkill]);
-    }
+    const targetSkill: NovelSkill = {
+      id: editingSkill ? editingSkill.id : `skill-custom-${crypto.randomUUID()}`,
+      name: skillName.trim(),
+      description: skillDesc.trim() || skillName.trim(),
+      promptInstruction: skillInstruction.trim(),
+      category: skillCategory,
+      enabled: editingSkill ? editingSkill.enabled : true,
+      isPreset: editingSkill ? editingSkill.isPreset : false,
+    };
+
+    // Save to global skills store in IndexedDB
+    await saveGlobalSkill(targetSkill);
+
+    setSkills((prev) => {
+      const exists = prev.some((s) => s.id === targetSkill.id);
+      if (exists) {
+        return prev.map((s) => (s.id === targetSkill.id ? targetSkill : s));
+      }
+      return [...prev, targetSkill];
+    });
 
     setIsSkillModalOpen(false);
-    setStatusMessage('🎯 写作 SKILL 已保存成功');
+    setStatusMessage('🎯 写作 SKILL 已成功保存至全局技能库');
   };
 
-  const handleDeleteSkill = (id: string) => {
+  const handleDeleteSkill = async (id: string) => {
+    await deleteGlobalSkill(id);
     setSkills((prev) => prev.filter((s) => s.id !== id));
-    setStatusMessage('已移除该 SKILL');
+    setStatusMessage('已在全局技能库中移除该 SKILL');
   };
 
-  const handleResetPresetSkills = () => {
-    setSkills(DEFAULT_PRESET_SKILLS);
+  const handleResetPresetSkills = async () => {
+    const resetList = await resetGlobalSkills();
+    setSkills(resetList);
     setStatusMessage('已重置恢复为默认推荐 SKILL 库');
   };
 

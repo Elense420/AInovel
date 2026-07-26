@@ -24,7 +24,7 @@ const BACKUP_DIR = '/AINovelistBackups';
  */
 export async function handleWebdavTest(req: Request, res: Response) {
   try {
-    const { webdavUrl, username, password } = req.body;
+    const { webdavUrl, username, password } = req.body || {};
     const client = getWebdavClient(webdavUrl, username, password);
 
     // Test directory access
@@ -60,7 +60,7 @@ export async function handleWebdavTest(req: Request, res: Response) {
  */
 export async function handleWebdavBackup(req: Request, res: Response) {
   try {
-    const { webdavUrl, username, password, backupData, customName } = req.body;
+    const { webdavUrl, username, password, backupData, customName } = req.body || {};
     if (!backupData) {
       return res.status(400).json({ error: '没有提供需要备份的数据' });
     }
@@ -105,7 +105,7 @@ export async function handleWebdavBackup(req: Request, res: Response) {
  */
 export async function handleWebdavList(req: Request, res: Response) {
   try {
-    const { webdavUrl, username, password } = req.body;
+    const { webdavUrl, username, password } = req.body || {};
     const client = getWebdavClient(webdavUrl, username, password);
 
     let items: any[] = [];
@@ -151,7 +151,7 @@ export async function handleWebdavList(req: Request, res: Response) {
  */
 export async function handleWebdavRestore(req: Request, res: Response) {
   try {
-    const { webdavUrl, username, password, fileName } = req.body;
+    const { webdavUrl, username, password, fileName } = req.body || {};
     if (!fileName) {
       return res.status(400).json({ error: '未指定要恢复的备份文件名' });
     }

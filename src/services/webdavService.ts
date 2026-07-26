@@ -14,8 +14,10 @@ async function safeFetchJson(url: string, options: RequestInit) {
   try {
     data = JSON.parse(text);
   } catch (e) {
+    const cleanText = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const snippet = cleanText.length > 120 ? cleanText.slice(0, 120) + '...' : cleanText;
     throw new Error(
-      `服务器未返回有效 JSON 格式数据 (${res.status} ${res.statusText})。请检查后端服务是否正在运行。`
+      `服务器错误 (${res.status}): ${snippet || '未返回有效 JSON 数据'}`
     );
   }
 

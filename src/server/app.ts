@@ -34,4 +34,13 @@ app.all('/api/*', (req, res) => {
   res.status(404).json({ error: `未知 API 路由: ${req.method} ${req.path}` });
 });
 
+// Global JSON Error Handler
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('API Server Error:', err);
+  const statusCode = err.status || err.statusCode || 500;
+  res.status(statusCode).json({
+    error: err.message || '服务器内部处理请求时发生未知错误',
+  });
+});
+
 export default app;

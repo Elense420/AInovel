@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Lightbulb, Sparkles, Search, Filter, Plus, Download, Upload, Trash2, Edit3, Check, Link as LinkIcon, BookOpen, X, FileText, ArrowRight } from 'lucide-react';
-import { InspirationRecord, Book, UiSettings, ApiConfig } from '../types';
+import { Lightbulb, Sparkles, Search, Filter, Plus, Download, Upload, Trash2, Edit3, Check, Link as LinkIcon, BookOpen, X, FileText, ArrowRight, Layers, ArrowUp, ArrowDown, Wand2, CheckSquare, Square, GripVertical } from 'lucide-react';
+import { InspirationRecord, Book, UiSettings, ApiConfig, IdeaCard } from '../types';
 import { dbPut, dbGetAll, dbDelete, dbClear, STORE_NAMES } from '../services/db';
 import { chatCompletion } from '../services/apiClient';
 import JSZip from 'jszip';
@@ -38,7 +38,16 @@ export const InspirationHubView: React.FC<InspirationHubViewProps> = ({
   onSelectInspirationForCreation,
   onOpenBookFromInspiration,
 }) => {
-  const [subTab, setSubTab] = useState<'create' | 'records'>('create');
+  const [subTab, setSubTab] = useState<'cards' | 'create' | 'records'>('cards');
+
+  // Idea Cards Stacking State
+  const [ideaCards, setIdeaCards] = useState<IdeaCard[]>([]);
+  const [newCardContent, setNewCardContent] = useState('');
+  const [newCardCategory, setNewCardCategory] = useState<string>('收集箱');
+  const [newCardTag, setNewCardTag] = useState('');
+  const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
+  const [isConvertingCards, setIsConvertingCards] = useState(false);
+  const [draggedCardIndex, setDraggedCardIndex] = useState<number | null>(null);
 
   // Generator inputs
   const [genreTags, setGenreTags] = useState<string[]>(DEFAULT_GENRE_TAGS);
@@ -73,6 +82,155 @@ export const InspirationHubView: React.FC<InspirationHubViewProps> = ({
   // Download Inspirations Dialog
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
   const [selectedDownloadIds, setSelectedDownloadIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    loadRecords();
+    loadIdeaCards();
+  }, []);
+
+  const loadIdeaCards = () => {
+    const saved = localStorage.getItem('ai_novelist_idea_cards');
+    if (saved) {
+      try {
+        setIdeaCards(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to parse idea cards', e);
+      }
+    } else {
+      const demoCards: IdeaCard[] = [
+        { id: '1', content: '高冷仙尊误喝真言水，在全宗门面前对废柴徒弟真情告白', tag: '名场面梗', category: '核心爆点', order: 0, createdAt: Date.now() },
+        { id: '2', content: '表面上是人畜无害的小助理，暗地里是操控幕后资本的顶级黑客', tag: '人设反差', category: '角色设定', order: 1, createdAt: Date.now() - 1000 },
+        { id: '3', content: '必须靠吸收别人的负面情绪当灵气修炼，满世界嘴炮吐槽', tag: '金手指 Hook', category: '金手指/机制', order: 2, createdAt: Date.now() - 2000 },
+      ];
+      setIdeaCards(demoCards);
+      localStorage.setItem('ai_novelist_idea_cards', JSON.stringify(demoCards));
+    }
+  };
+
+  const saveIdeaCards = (updated: IdeaCard[]) => {
+    setIdeaCards(updated);
+    localStorage.setItem('ai_novelist_idea_cards', JSON.stringify(updated));
+  };
+
+  const handleAddCard = () => {
+    if (!newCardContent.trim()) return;
+    const newCard: IdeaCard = {
+      id: crypto.randomUUID(),
+      content: newCardContent.trim(),
+      tag: newCardTag.trim() || '灵感随笔',
+      category: newCardCategory || '收集箱',
+      order: ideaCards.length,
+      createdAt: Date.now(),
+    };
+    const updated = [newCard, ...ideaCards];
+    saveIdeaCards(updated);
+    setNewCardContent('');
+    setNewCardTag('');
+  };
+
+  const handleDeleteCard = (cardId: string) => {
+    const updated = ideaCards.filter((c) => c.id !== cardId);
+    saveIdeaCards(updated);
+    setSelectedCardIds((prev) => prev.filter((id) => id !== cardId));
+  };
+
+  const handleMoveCard = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= ideaCards.length) return;
+
+    const updated = [...ideaCards];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+    saveIdeaCards(updated);
+  };
+
+  const toggleSelectCard = (cardId: string) => {
+    setSelectedCardIds((prev) =>
+      prev.includes(cardId) ? prev.filter((id) => id !== cardId) : [...prev, cardId]
+    );
+  };
+
+  const handleSelectAllCards = () => {
+    if (selectedCardIds.length === ideaCards.length) {
+
+      setSelectedCardIds([]);
+    } else {
+      setSelectedCardIds(ideaCards.map((c) => c.id));
+    }
+  };
+
+  // Convert Selected Cards or Single Card into Full Book Outline
+  const handleConvertCardsToOutline = async (targetCardIds?: string[]) => {
+    const idsToUse = targetCardIds || selectedCardIds;
+    if (idsToUse.length === 0) {
+      alert('请先勾选需要融合的灵感卡片！');
+      return;
+    }
+
+    const cardsToConvert = ideaCards.filter((c) => idsToUse.includes(c.id));
+    const cardTexts = cardsToConvert.map((c, i) => `${i + 1}. [${c.category || '灵感'}] ${c.content} (标签: ${c.tag || '无'})`).join('\n');
+
+    const inspCfg = configs.find((c) => c.id === uiSettings.inspirationApiCfgId) || configs[0];
+    const modelToUse = uiSettings.inspirationApiModel || 'gemini-3.6-flash';
+
+    setIsConvertingCards(true);
+    setStatusMessage('🪄 AI 正在将选中的卡片点子融合成完整小说大纲...');
+
+    try {
+      const systemPrompt = `你是一位顶级创意小说主编。请根据用户提供的零散写作点子卡片，融合成一篇完整、逻辑通顺、富有爆点与戏剧冲突的小说大纲。
+${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : ''}
+请严格输出以下 Markdown 结构：
+---
+### 大纲标题：[小说标题]
+**书名：** [小说名称]
+**题材：** [题材分类]
+**风格：** [风格基调]
+**核心设定：** [整合世界观与核心Hook机制]
+**主要角色原型：** [角色设定与反差]
+**剧情梗概：** [承接卡片点子的完整剧情走线]
+**结局走向：** [HE / BE / 爽快结局]
+---`;
+
+      const res = await chatCompletion({
+        provider: inspCfg?.provider,
+        baseUrl: inspCfg?.baseUrl,
+        apiKey: inspCfg?.apiKey,
+        model: modelToUse,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `请将以下灵感卡片融合成一篇长篇小说大纲：\n\n${cardTexts}` },
+        ],
+        temperature: 0.9,
+      });
+
+      const parsed = parseGeneratedOutline(res.content);
+      const newRecord: InspirationRecord = {
+        id: crypto.randomUUID(),
+        createdAt: Date.now(),
+        title: parsed.title,
+        genre: parsed.genre,
+        style: parsed.style,
+        world: parsed.world,
+        characters: parsed.characters,
+        outline: parsed.outline,
+        rawContent: res.content,
+        linkedNovels: [],
+      };
+
+      await dbPut(STORE_NAMES.INSPIRATION_RECORDS, newRecord);
+      await loadRecords();
+
+      setStatusMessage(`🎉 卡片已成功融合成大纲《${parsed.title}》！并已保存至灵感库。`);
+      setSelectedRecord(newRecord);
+      setSubTab('records');
+    } catch (err: any) {
+      console.error(err);
+      setStatusMessage(`融合大纲失败: ${err.message}`);
+    } finally {
+      setIsConvertingCards(false);
+    }
+  };
 
   useEffect(() => {
     loadRecords();
@@ -427,7 +585,19 @@ ${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : '
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
       {/* Top Sub Tabs */}
-      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-200/60 dark:bg-slate-800/60 w-fit backdrop-blur-md">
+      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-slate-200/60 dark:bg-slate-800/60 w-fit backdrop-blur-md">
+        <button
+          onClick={() => setSubTab('cards')}
+          className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 ${
+            subTab === 'cards'
+              ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <Layers className="w-4 h-4 text-emerald-500" />
+          <span>灵感卡片堆叠 ({ideaCards.length})</span>
+        </button>
+
         <button
           onClick={() => setSubTab('create')}
           className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 ${
@@ -437,7 +607,7 @@ ${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : '
           }`}
         >
           <Sparkles className="w-4 h-4" />
-          <span>创作灵感</span>
+          <span>AI脑思大纲</span>
         </button>
 
         <button
@@ -452,6 +622,206 @@ ${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : '
           <span>灵感记录库 ({records.length})</span>
         </button>
       </div>
+
+      {/* Status toast message */}
+      {statusMessage && (
+        <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs sm:text-sm font-medium flex items-center justify-between animate-fade-in">
+          <span>{statusMessage}</span>
+          <button onClick={() => setStatusMessage('')} className="text-xs opacity-60 hover:opacity-100">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* SubTab 0: Idea Card Stacking Board */}
+      {subTab === 'cards' && (
+        <div className="space-y-6">
+          {/* Card Add Input Box */}
+          <div className="glass-panel p-6 sm:p-8 rounded-3xl space-y-4">
+            <div className="flex items-center gap-3 border-b border-slate-200/60 dark:border-slate-800 pb-4">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                  灵感卡片堆叠整理
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  记录零散的点子、反差人设、名场面梗或金手指。拖拽或调整排序后，勾选卡片可一键融入生成完整书籍大纲！
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div className="sm:col-span-2">
+                <input
+                  type="text"
+                  value={newCardContent}
+                  onChange={(e) => setNewCardContent(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddCard()}
+                  placeholder="写下灵感点子（例：高冷反派隐藏身份是主角亲哥哥...）"
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-hidden focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <select
+                  value={newCardCategory}
+                  onChange={(e) => setNewCardCategory(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 text-xs sm:text-sm text-slate-800 dark:text-slate-100 cursor-pointer"
+                >
+                  <option value="收集箱">📦 收集箱</option>
+                  <option value="角色设定">👤 角色设定</option>
+                  <option value="核心爆点">🔥 核心爆点</option>
+                  <option value="金手指/机制">⚡ 金手指/机制</option>
+                  <option value="世界观法则">🌍 世界观法则</option>
+                </select>
+              </div>
+
+              <div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newCardTag}
+                    onChange={(e) => setNewCardTag(e.target.value)}
+                    placeholder="标签 (例: 名场面)"
+                    className="w-full px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-900/80 text-xs text-slate-800 dark:text-slate-100"
+                  />
+                  <button
+                    onClick={handleAddCard}
+                    className="px-4 py-2.5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs transition-all shadow-md shadow-emerald-500/20 shrink-0 flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>添加</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Header bar for Cards */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-2">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSelectAllCards}
+                className="px-3 py-1.5 rounded-xl bg-slate-200/70 dark:bg-slate-800 hover:bg-slate-300 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-1.5"
+              >
+                {selectedCardIds.length === ideaCards.length && ideaCards.length > 0 ? (
+                  <CheckSquare className="w-4 h-4 text-emerald-500" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-400" />
+                )}
+                <span>全选 ({selectedCardIds.length}/{ideaCards.length})</span>
+              </button>
+            </div>
+
+            <button
+              disabled={selectedCardIds.length === 0 || isConvertingCards}
+              onClick={() => handleConvertCardsToOutline()}
+              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-600 hover:from-emerald-600 hover:to-cyan-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-500/20 transition-all active:scale-95 disabled:opacity-40 flex items-center gap-2"
+            >
+              <Wand2 className="w-4 h-4" />
+              <span>{isConvertingCards ? '融合大纲中...' : `一键将选中的卡片 (${selectedCardIds.length}) 融合成大纲`}</span>
+            </button>
+          </div>
+
+          {/* Card Deck Display */}
+          {ideaCards.length === 0 ? (
+            <div className="glass-panel p-12 rounded-3xl text-center space-y-3">
+              <Layers className="w-12 h-12 mx-auto text-slate-400 opacity-50" />
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                目前还没有灵感卡片，请在上方输入框写下你的第一个写作点子吧！
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {ideaCards.map((card, index) => {
+                const isSelected = selectedCardIds.includes(card.id);
+                const gradientClass = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
+
+                return (
+                  <div
+                    key={card.id}
+                    className={`relative p-5 rounded-3xl bg-gradient-to-br ${gradientClass} border shadow-sm transition-all duration-200 hover:shadow-md flex flex-col justify-between space-y-4 group ${
+                      isSelected ? 'ring-2 ring-emerald-500 scale-[1.02]' : ''
+                    }`}
+                  >
+                    {/* Card Header */}
+                    <div className="flex items-center justify-between gap-2 border-b border-black/5 dark:border-white/10 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => toggleSelectCard(card.id)}
+                          className="text-slate-700 dark:text-slate-200 hover:scale-110 transition-transform"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-500" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-400" />
+                          )}
+                        </button>
+                        <span className="px-2.5 py-0.5 rounded-full bg-black/5 dark:bg-white/10 text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                          {card.category || '收集箱'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {card.tag && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-medium">
+                            #{card.tag}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => handleDeleteCard(card.id)}
+                          className="text-slate-400 hover:text-rose-500 p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                          title="删除卡片"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Card Content Body */}
+                    <div className="text-xs sm:text-sm font-medium text-slate-800 dark:text-slate-100 leading-relaxed min-h-[60px] whitespace-pre-wrap">
+                      {card.content}
+                    </div>
+
+                    {/* Card Footer controls */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-black/5 dark:border-white/10 text-xs">
+                      {/* Reorder Up / Down */}
+                      <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <button
+                          disabled={index === 0}
+                          onClick={() => handleMoveCard(index, 'up')}
+                          className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-20"
+                          title="上移堆叠"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          disabled={index === ideaCards.length - 1}
+                          onClick={() => handleMoveCard(index, 'down')}
+                          className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-20"
+                          title="下移堆叠"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => handleConvertCardsToOutline([card.id])}
+                        className="px-2.5 py-1 rounded-xl bg-white/80 dark:bg-slate-800/80 hover:bg-emerald-500 hover:text-white text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold transition-all flex items-center gap-1 shadow-2xs"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>单卡转大纲</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Panel 1: Create Inspiration Panel */}
       {subTab === 'create' && (

@@ -17,6 +17,14 @@ import {
   Loader2,
   CheckCircle2,
   CloudCheck,
+  Flame,
+  Maximize2,
+  Minimize2,
+  X,
+  Type,
+  Sun,
+  Moon,
+  BookOpenText,
 } from 'lucide-react';
 import { Book, Chapter, UiSettings, ApiConfig } from '../types';
 import { streamChatCompletion, chatCompletion } from '../services/apiClient';
@@ -46,6 +54,12 @@ export const WriterView: React.FC<WriterViewProps> = ({
   const [isReviewOpen, setIsOutlineReviewOpen] = useState(false);
   const [isRewriteOpen, setIsRewriteOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(true);
+
+  // New Feature States: Climax Multiplier & Focus Reading Mode
+  const [climaxMultiplierEnabled, setClimaxMultiplierEnabled] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [focusFontSize, setFocusFontSize] = useState<number>(18);
+  const [focusTheme, setFocusTheme] = useState<'sepia' | 'dark' | 'light'>('sepia');
 
   // Editable chapter fields
   const [chapterTitle, setChapterTitle] = useState('');
@@ -281,6 +295,28 @@ export const WriterView: React.FC<WriterViewProps> = ({
     }
     if (xpPreferences) {
       systemPrompt += `\n\n# 用户 XP 偏好与避雷要求\n${xpPreferences}`;
+    }
+
+    // Lorebook prompt injection
+    if (currentBook.settings?.lorebook) {
+      const activeLore = currentBook.settings.lorebook.filter((e) => e.enabled);
+      if (activeLore.length > 0) {
+        systemPrompt += `\n\n# 📜 角色与癖好专属档案库 (Lorebook 高权重法则 - 必写指令)\n`;
+        activeLore.forEach((entry) => {
+          systemPrompt += `- 【${entry.name}】`;
+          if (entry.appearance) systemPrompt += ` 外貌: ${entry.appearance} |`;
+          if (entry.personality) systemPrompt += ` 性格: ${entry.personality} |`;
+          if (entry.behaviorQuirks) systemPrompt += ` 癖好/语气: ${entry.behaviorQuirks} |`;
+          if (entry.mustIncludeTaboos) systemPrompt += ` 必写/禁忌: ${entry.mustIncludeTaboos}`;
+          systemPrompt += `\n`;
+        });
+      }
+    }
+
+    // Climax Multiplier Prompt Injection
+    if (climaxMultiplierEnabled) {
+      systemPrompt += `\n\n# 🔥 高潮细节放大指令 (黄金名场面重磅模式已激活)：
+当前正处于故事的核心高潮/名场面爆点！请务必大幅延展镜头推进慢放，进行多感官极度细腻的沉浸式刻画（包括环境光影、声响、温度触感、微动作细节、眼神交锋与内心深处起伏心理），对情绪张力和氛围进行极致拉满，杜绝任何轻描淡写或快速推进！`;
     }
 
     let userPrompt = `请根据以上设定，创作第 ${chapterIndexToGen} 章，目标字数约 ${words} 字。`;
@@ -652,10 +688,33 @@ ${chaptersText}`;
             <span className="text-emerald-600 dark:text-emerald-400 font-bold">{totalWordCount.toLocaleString()}</span>
           </div>
 
-          <div className="flex items-center gap-1.5 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+            {/* Climax Multiplier Toggle */}
+            <button
+              onClick={() => setClimaxMultiplierEnabled(!climaxMultiplierEnabled)}
+              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl font-bold transition-all flex items-center justify-center gap-1 text-xs border ${
+                climaxMultiplierEnabled
+                  ? 'bg-gradient-to-r from-amber-500 to-rose-500 text-white border-amber-400 shadow-md shadow-rose-500/20 animate-pulse'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+              }`}
+              title="激活名场面高潮模式，AI 将大幅拉长细节慢放与情绪氛围"
+            >
+              <Flame className={`w-3.5 h-3.5 ${climaxMultiplierEnabled ? 'text-yellow-200' : 'text-amber-500'}`} />
+              <span>高潮细节放大 [{climaxMultiplierEnabled ? '已开启' : '关'}]</span>
+            </button>
+
+            {/* Focus Reading Mode Button */}
+            <button
+              onClick={() => setIsFocusMode(true)}
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 font-medium transition-colors flex items-center justify-center gap-1 text-xs border border-purple-500/20"
+            >
+              <BookOpenText className="w-3.5 h-3.5 text-purple-500" />
+              <span>👁️ 专注阅读</span>
+            </button>
+
             <button
               onClick={() => setIsEditMode(!isEditMode)}
-              className="flex-1 sm:flex-none px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
+              className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
             >
               {isEditMode ? <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-500" /> : <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />}
               <span>{isEditMode ? '阅读模式' : '编辑模式'}</span>
@@ -664,7 +723,7 @@ ${chaptersText}`;
             {isEditMode && (
               <button
                 onClick={handleSaveChapterEdits}
-                className="flex-1 sm:flex-none px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium shadow-md shadow-emerald-500/20 transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
+                className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium shadow-md shadow-emerald-500/20 transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
               >
                 {saveSuccessToast ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                 <span>{saveSuccessToast ? '已保存' : '保存章节'}</span>
@@ -673,7 +732,7 @@ ${chaptersText}`;
 
             <button
               onClick={handleGenerateSummary}
-              className="flex-1 sm:flex-none px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
+              className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium transition-colors flex items-center justify-center gap-1 text-xs sm:text-sm"
             >
               <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-500" />
               <span>生成总结</span>
@@ -905,6 +964,131 @@ ${chaptersText}`;
           </div>
         )}
       </div>
+
+      {/* Fullscreen Focus Reading Mode Overlay */}
+      {isFocusMode && (
+        <div
+          className={`fixed inset-0 z-50 overflow-y-auto transition-colors animate-fade-in ${
+            focusTheme === 'sepia'
+              ? 'bg-[#fbf0d9] text-[#423321]'
+              : focusTheme === 'dark'
+              ? 'bg-slate-950 text-slate-200'
+              : 'bg-white text-slate-900'
+          }`}
+        >
+          {/* Top Control Header */}
+          <div className="sticky top-0 z-30 px-4 py-3 sm:px-8 sm:py-4 backdrop-blur-md bg-white/30 dark:bg-slate-900/40 border-b border-black/10 dark:border-white/10 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <BookOpenText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <div>
+                <h2 className="font-bold text-sm sm:text-base leading-tight">
+                  《{currentBook.title}》 - {chapterTitle}
+                </h2>
+                <p className="text-[11px] opacity-70">
+                  第 {currentChapterIndex + 1} / {currentBook.chapters.length} 章 • 共 {chapterText.length} 字
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
+              {/* Font Sizing Controls */}
+              <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 p-1 rounded-xl text-xs">
+                <button
+                  onClick={() => setFocusFontSize((prev) => Math.max(14, prev - 2))}
+                  className="px-2 py-1 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 font-bold"
+                  title="缩小字号"
+                >
+                  A-
+                </button>
+                <span className="px-1 text-[11px] font-mono">{focusFontSize}px</span>
+                <button
+                  onClick={() => setFocusFontSize((prev) => Math.min(32, prev + 2))}
+                  className="px-2 py-1 rounded-lg hover:bg-black/10 dark:hover:bg-white/10 font-bold"
+                  title="放大字号"
+                >
+                  A+
+                </button>
+              </div>
+
+              {/* Reading Theme Palette */}
+              <div className="flex items-center gap-1 bg-black/5 dark:bg-white/10 p-1 rounded-xl text-xs">
+                <button
+                  onClick={() => setFocusTheme('sepia')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    focusTheme === 'sepia' ? 'bg-[#f4e2c1] text-[#423321] font-bold shadow-xs' : ''
+                  }`}
+                >
+                  羊皮纸
+                </button>
+                <button
+                  onClick={() => setFocusTheme('dark')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    focusTheme === 'dark' ? 'bg-slate-800 text-white font-bold shadow-xs' : ''
+                  }`}
+                >
+                  夜间
+                </button>
+                <button
+                  onClick={() => setFocusTheme('light')}
+                  className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    focusTheme === 'light' ? 'bg-white text-slate-900 font-bold shadow-xs' : ''
+                  }`}
+                >
+                  纯白
+                </button>
+              </div>
+
+              {/* Exit Button */}
+              <button
+                onClick={() => setIsFocusMode(false)}
+                className="px-3.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-semibold text-xs transition-colors flex items-center gap-1 shadow-md shadow-rose-500/20"
+              >
+                <X className="w-4 h-4" />
+                <span>退出专注阅读</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Immersive Text Reading Canvas */}
+          <div className="max-w-3xl mx-auto px-6 py-10 sm:py-16 space-y-6 animate-fade-in font-serif">
+            <h1 className="text-2xl sm:text-4xl font-extrabold text-center tracking-tight mb-8">
+              {chapterTitle || `第 ${currentChapterIndex + 1} 章`}
+            </h1>
+
+            <div
+              className="leading-relaxed whitespace-pre-wrap select-text tracking-wide"
+              style={{ fontSize: `${focusFontSize}px`, lineHeight: '1.8' }}
+            >
+              {chapterText || '本章暂无正文内容...'}
+            </div>
+
+            {/* Bottom Chapter Switcher in Focus Mode */}
+            <div className="pt-12 border-t border-black/10 dark:border-white/10 flex items-center justify-between gap-4 font-sans text-xs">
+              <button
+                disabled={currentChapterIndex <= 0}
+                onClick={() => setCurrentChapterIndex((prev) => Math.max(0, prev - 1))}
+                className="px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 disabled:opacity-30 font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>上一章</span>
+              </button>
+
+              <span className="opacity-70 font-bold">
+                {currentChapterIndex + 1} / {currentBook.chapters.length} 章
+              </span>
+
+              <button
+                disabled={currentChapterIndex >= currentBook.chapters.length - 1}
+                onClick={() => setCurrentChapterIndex((prev) => Math.min(currentBook.chapters.length - 1, prev + 1))}
+                className="px-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 disabled:opacity-30 font-medium flex items-center gap-1.5 transition-colors"
+              >
+                <span>下一章</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

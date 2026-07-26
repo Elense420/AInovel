@@ -1,3 +1,22 @@
+export interface IdeaCard {
+  id: string;
+  content: string;
+  tag?: string;
+  category?: string;
+  order: number;
+  createdAt: number;
+}
+
+export interface LorebookEntry {
+  id: string;
+  name: string;
+  appearance?: string;
+  personality?: string;
+  behaviorQuirks?: string;
+  mustIncludeTaboos?: string;
+  enabled: boolean;
+}
+
 export interface BookSettings {
   genre: string;
   style: string;
@@ -11,6 +30,7 @@ export interface BookSettings {
   characters: string;
   world: string;
   styleReference: string | null;
+  lorebook?: LorebookEntry[];
 }
 
 export interface Chapter {

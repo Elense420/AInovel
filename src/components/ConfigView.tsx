@@ -555,12 +555,12 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           className="w-full p-4 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-800/60 text-xs sm:text-sm leading-relaxed focus:outline-hidden"
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 flex-1 min-w-0">
             <select
               value={selectedXpHistoryId}
               onChange={(e) => setSelectedXpHistoryId(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs"
+              className="flex-1 min-w-[140px] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-800/60 text-xs text-slate-700 dark:text-slate-200 truncate"
             >
               <option value="">选择历史 XP 偏好...</option>
               {xpHistory.map((h) => (
@@ -569,23 +569,25 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 </option>
               ))}
             </select>
-            <button
-              onClick={handleLoadXpHistory}
-              className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-300"
-            >
-              加载
-            </button>
-            <button
-              onClick={handleDeleteXpHistory}
-              className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-600 text-xs hover:bg-rose-500/20"
-            >
-              删除
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={handleLoadXpHistory}
+                className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-300 transition-colors"
+              >
+                加载
+              </button>
+              <button
+                onClick={handleDeleteXpHistory}
+                className="px-3 py-2 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs hover:bg-rose-500/20 transition-colors"
+              >
+                删除
+              </button>
+            </div>
           </div>
 
           <button
             onClick={handleSaveXpPreferences}
-            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-xs sm:text-sm shadow-md"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-xs sm:text-sm shadow-md transition-colors shrink-0 flex items-center justify-center gap-1.5"
           >
             💾 保存当前 XP 偏好
           </button>

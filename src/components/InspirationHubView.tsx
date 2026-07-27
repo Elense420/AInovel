@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { generateUUID } from '../utils/uuid';
 import { Lightbulb, Sparkles, Search, Filter, Plus, Download, Upload, Trash2, Edit3, Check, Link as LinkIcon, BookOpen, X, FileText, ArrowRight, Layers, ArrowUp, ArrowDown, Wand2, CheckSquare, Square, GripVertical } from 'lucide-react';
 import { InspirationRecord, Book, UiSettings, ApiConfig, IdeaCard } from '../types';
 import { dbPut, dbGetAll, dbDelete, dbClear, STORE_NAMES } from '../services/db';
@@ -115,7 +116,7 @@ export const InspirationHubView: React.FC<InspirationHubViewProps> = ({
   const handleAddCard = () => {
     if (!newCardContent.trim()) return;
     const newCard: IdeaCard = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       content: newCardContent.trim(),
       tag: newCardTag.trim() || '灵感随笔',
       category: newCardCategory || '收集箱',
@@ -206,7 +207,7 @@ ${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : '
 
       const parsed = parseGeneratedOutline(res.content);
       const newRecord: InspirationRecord = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         createdAt: Date.now(),
         title: parsed.title,
         genre: parsed.genre,
@@ -395,7 +396,7 @@ ${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : '
       for (const blockText of blocks) {
         const parsed = parseGeneratedOutline(blockText);
         const record: InspirationRecord = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           createdAt: Date.now(),
           title: parsed.title,
           genre: parsed.genre,

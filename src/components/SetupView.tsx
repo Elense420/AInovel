@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { generateUUID } from '../utils/uuid';
 import { Sparkles, Save, Upload, Trash2, RotateCcw, BookOpen, Layers, UserCheck, Compass, Sliders, Wand2, FileText, Plus, Edit3, X, Check, BookMarked, HeartHandshake, Zap, ShieldAlert, Cpu } from 'lucide-react';
 import { Book, BookSettings, UiSettings, ApiConfig, HistoryItem, LorebookEntry, NovelSkill, DEFAULT_PRESET_SKILLS } from '../types';
 import { dbPut, dbGetAll, dbDelete, STORE_NAMES, getGlobalSkills, saveGlobalSkill, deleteGlobalSkill, resetGlobalSkills } from '../services/db';
@@ -168,7 +169,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
       );
     } else {
       const newEntry: LorebookEntry = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         name: loreName.trim(),
         appearance: loreAppearance.trim(),
         personality: lorePersonality.trim(),
@@ -225,7 +226,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
     }
 
     const targetSkill: NovelSkill = {
-      id: editingSkill ? editingSkill.id : `skill-custom-${crypto.randomUUID()}`,
+      id: editingSkill ? editingSkill.id : `skill-custom-${generateUUID()}`,
       name: skillName.trim(),
       description: skillDesc.trim() || skillName.trim(),
       promptInstruction: skillInstruction.trim(),
@@ -490,18 +491,20 @@ export const SetupView: React.FC<SetupViewProps> = ({
       skills,
     };
 
-    const newBook: Book = {
-      id: crypto.randomUUID(),
+    const bookId = currentBook && currentBook.chapters.length === 0 ? currentBook.id : generateUUID();
+
+    const bookToStart: Book = {
+      id: bookId,
       title: title.trim(),
-      createdAt: Date.now(),
+      createdAt: currentBook ? currentBook.createdAt : Date.now(),
       lastModifiedAt: Date.now(),
-      chapters: [],
-      archivedChapters: [],
-      summaries: [],
+      chapters: currentBook ? currentBook.chapters : [],
+      archivedChapters: currentBook ? currentBook.archivedChapters : [],
+      summaries: currentBook ? currentBook.summaries : [],
       settings,
     };
 
-    onStartWritingFirstChapter(newBook);
+    onStartWritingFirstChapter(bookToStart);
   };
 
   // Submit Update Current Book Settings

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { generateUUID } from '../utils/uuid';
 import { Settings, Cpu, Heart, Palette, Database, Save, Trash2, CheckCircle, RefreshCw, Layers, Zap, Plus, Edit3, Sparkles, X, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 import { ApiConfig, UiSettings, HistoryItem, NovelSkill, DEFAULT_PRESET_SKILLS } from '../types';
 import { dbPut, dbGetAll, dbGet, dbDelete, dbClear, STORE_NAMES, getGlobalSkills, saveGlobalSkill, deleteGlobalSkill, resetGlobalSkills } from '../services/db';
@@ -104,7 +105,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     }
 
     const targetSkill: NovelSkill = {
-      id: editingSkill ? editingSkill.id : `skill-custom-${crypto.randomUUID()}`,
+      id: editingSkill ? editingSkill.id : `skill-custom-${generateUUID()}`,
       name: skillName.trim(),
       description: skillDesc.trim() || skillName.trim(),
       promptInstruction: skillInstruction.trim(),
@@ -208,7 +209,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     }
 
     const newCfg: ApiConfig = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: cfgName.trim(),
       baseUrl: cfgBaseUrl.trim(),
       apiKey: cfgApiKey.trim(),

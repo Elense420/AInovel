@@ -23,6 +23,8 @@ import {
   DEFAULT_BUILTIN_CONFIG,
 } from './services/db';
 
+import { generateUUID } from './utils/uuid';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<string>('novels');
 
@@ -216,7 +218,7 @@ export default function App() {
   // Pre-fill setup from Inspiration Record
   const handleSelectInspirationForCreation = (record: InspirationRecord) => {
     const dummyBook: Book = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       title: record.title,
       createdAt: Date.now(),
       lastModifiedAt: Date.now(),

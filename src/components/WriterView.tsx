@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { Book, Chapter, UiSettings, ApiConfig } from '../types';
 import { streamChatCompletion, chatCompletion } from '../services/apiClient';
+import { generateUUID } from '../utils/uuid';
 
 interface WriterViewProps {
   currentBook: Book | null;
@@ -556,7 +557,7 @@ export const WriterView: React.FC<WriterViewProps> = ({
 
       // Construct new chapter object
       const newChapter: Chapter = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         index: chapterIndexToGen,
         title: parsed.title,
         text: parsed.bodyText,
@@ -780,7 +781,7 @@ ${chaptersText}`;
       });
 
       const newSummary = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         createdAt: Date.now(),
         startChapter: 1,
         endChapter: currentBook.chapters.length,

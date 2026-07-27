@@ -138,6 +138,16 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     }
   };
 
+  const handleDeleteGlobalSkill = async (skillId: string, skillName: string) => {
+    if (confirm(`确定要从全局 SKILL 技能库中删除技能 "${skillName}" 吗？\n（删除后后续新建小说将不再自动载入此技能，可随时点击‘重置恢复预设’恢复）`)) {
+      await deleteGlobalSkill(skillId);
+      const updated = await getGlobalSkills();
+      setGlobalSkills(updated);
+      setSkillStatusMsg(`已成功删除 SKILL "${skillName}"`);
+      setTimeout(() => setSkillStatusMsg(''), 2500);
+    }
+  };
+
   const handleGenerateSkillInstructionWithAI = async () => {
     if (!skillName.trim() && !skillDesc.trim()) {
       alert('请先填写 SKILL 名称或技能功能描述');
@@ -345,33 +355,51 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     }
   };
 
-  // Full backup & restore
+  // Full backup & restore (IndexedDB stores + localStorage idea cards + uiSettings)
   const handleBackupAllData = async () => {
-    const allData: Record<string, any> = {};
-    for (const storeName of Object.values(STORE_NAMES)) {
-      allData[storeName] = await dbGetAll(storeName);
+    try {
+      const allData: Record<string, any> = {
+        _exportVersion: 2,
+        _exportedAt: new Date().toISOString(),
+      };
+
+      for (const storeName of Object.values(STORE_NAMES)) {
+        allData[storeName] = await dbGetAll(storeName);
+      }
+      allData.uiSettings = await dbGet(STORE_NAMES.UI_SETTINGS, 'current');
+
+      const localStorageData: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          localStorageData[key] = localStorage.getItem(key) || '';
+        }
+      }
+      allData.localStorageData = localStorageData;
+
+      const jsonStr = JSON.stringify(allData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const filename = `AI小说家_全量数据备份_${new Date().toISOString().slice(0, 10)}.json`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setBackupStatus('✅ 全量备份 JSON 已顺利导出！（包含全部小说、灵感卡片堆叠、全局 SKILL 库及配置）');
+    } catch (err: any) {
+      console.error(err);
+      setBackupStatus(`备份失败: ${err.message}`);
     }
-    allData.uiSettings = await dbGet(STORE_NAMES.UI_SETTINGS, 'current');
-
-    const jsonStr = JSON.stringify(allData, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const filename = `AI小说家_全量数据备份_${new Date().toISOString().slice(0, 10)}.json`;
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    setBackupStatus('✅ 全量备份 JSON 已顺利下载');
   };
 
   const handleRestoreAllData = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!confirm('⚠️ 确定要恢复全量数据吗？这将覆盖当前所有本地小说、历史大纲及配置！')) return;
+    if (!confirm('⚠️ 确定要恢复全量数据吗？这将覆盖当前本地的所有小说、灵感卡片堆叠、全局 SKILL 技能库及系统配置！')) return;
 
     const reader = new FileReader();
     reader.onload = async (evt) => {
@@ -389,7 +417,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           await dbPut(STORE_NAMES.UI_SETTINGS, imported.uiSettings);
         }
 
-        setBackupStatus('数据恢复成功！页面即刻刷新...');
+        if (imported.localStorageData && typeof imported.localStorageData === 'object') {
+          Object.entries(imported.localStorageData).forEach(([k, v]) => {
+            if (typeof v === 'string') {
+              localStorage.setItem(k, v);
+            }
+          });
+        }
+
+        setBackupStatus('🎉 全量数据恢复成功！页面即刻刷新以载入所有最新数据...');
         setTimeout(() => location.reload(), 1200);
       } catch (err: any) {
         setBackupStatus(`恢复失败: ${err.message}`);
@@ -828,11 +864,20 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                           <div className="flex items-center gap-1 shrink-0">
                             <button
                               onClick={() => handleOpenEditSkillModal(skill)}
-                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 transition-colors flex items-center gap-1"
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-cyan-600 dark:text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20 transition-colors flex items-center gap-1 cursor-pointer"
                               title="修改 SKILL"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                               <span>修改</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteGlobalSkill(skill.id, skill.name)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 transition-colors flex items-center gap-1 cursor-pointer"
+                              title="删除 SKILL"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>删除</span>
                             </button>
                           </div>
                         </div>

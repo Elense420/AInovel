@@ -198,7 +198,24 @@ export const WriterView: React.FC<WriterViewProps> = ({
   const contentContainerRef = useRef<HTMLDivElement>(null);
 
   const activeChapter: Chapter | undefined = currentBook?.chapters[currentChapterIndex];
-  const isLastChapter = Boolean(currentBook && currentChapterIndex === currentBook.chapters.length - 1);
+  const isLastChapter = Boolean(currentBook && (currentBook.chapters.length === 0 || currentChapterIndex === currentBook.chapters.length - 1));
+
+  const autoStartedBookIdsRef = useRef<Set<string>>(new Set());
+
+  // Auto-trigger Chapter 1 expansion when creating/opening a new book without chapters
+  useEffect(() => {
+    if (
+      currentBook &&
+      currentBook.chapters.length === 0 &&
+      !isGenerating &&
+      !autoStartedBookIdsRef.current.has(currentBook.id)
+    ) {
+      autoStartedBookIdsRef.current.add(currentBook.id);
+      setChapterTitle('第一章：正在由 AI 自动扩写中...');
+      setChapterText('');
+      handleGenerateNextChapter('', false);
+    }
+  }, [currentBook?.id, currentBook?.chapters?.length]);
 
   // Sync state when active chapter changes
   useEffect(() => {
@@ -211,13 +228,13 @@ export const WriterView: React.FC<WriterViewProps> = ({
       isInitialChapterLoadRef.current = true;
       setAutoSaveStatus('idle');
       setShowAutoSaveToast(false);
-    } else {
+    } else if (!isGenerating) {
       setChapterTitle('');
       setChapterText('');
       setGenMeta('');
       setNextPlotInput('');
     }
-  }, [currentChapterIndex, currentBook?.id]);
+  }, [currentChapterIndex, currentBook?.id, Boolean(activeChapter)]);
 
   // Debounced auto-save effect
   useEffect(() => {
@@ -275,24 +292,58 @@ export const WriterView: React.FC<WriterViewProps> = ({
     return () => clearTimeout(timer);
   }, [chapterTitle, chapterText]);
 
-  if (!currentBook || currentBook.chapters.length === 0) {
+  if (!currentBook) {
     return (
       <div className="glass-panel p-12 rounded-3xl text-center space-y-4 max-w-xl mx-auto my-12">
         <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
           <AlertCircle className="w-8 h-8" />
         </div>
         <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-          尚未打开或创建小说章节
+          尚未打开或创建小说作品
         </h3>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           请先去「我的书库」选择一本现有作品，或在「写作设定」中创建新作品并扩写第一章。
         </p>
         <button
           onClick={onGoToSetup}
-          className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm transition-all shadow-md shadow-emerald-500/20"
+          className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
         >
           去设定新小说
         </button>
+      </div>
+    );
+  }
+
+  if (currentBook.chapters.length === 0 && !isGenerating && !chapterText) {
+    return (
+      <div className="glass-panel p-10 sm:p-12 rounded-3xl text-center space-y-5 max-w-2xl mx-auto my-8 border border-emerald-500/20 animate-fade-in">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shadow-inner">
+          <Sparkles className="w-8 h-8 animate-bounce" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">
+            《{currentBook.title}》准备自动扩写第一章
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            作品设定、大纲与 SKILL 规则已载入。点击下方按钮即可立即调用 AI 模型自动扩写第一章！
+          </p>
+        </div>
+
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={onGoToSetup}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium text-xs sm:text-sm transition-all cursor-pointer"
+          >
+            ⚙️ 修改写作设定
+          </button>
+          <button
+            onClick={() => handleGenerateNextChapter('', false)}
+            className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs sm:text-sm transition-all shadow-lg shadow-emerald-500/25 flex items-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>🚀 自动扩写第一章</span>
+          </button>
+        </div>
       </div>
     );
   }
@@ -768,6 +819,19 @@ ${chaptersText}`;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto animate-fade-in pb-12">
+      {/* Chapter 1 Auto-expansion Streaming Banner */}
+      {currentBook.chapters.length === 0 && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-500/15 via-emerald-500/15 to-teal-500/15 border border-cyan-500/30 text-slate-800 dark:text-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-pulse">
+          <div className="flex items-center gap-2.5 font-bold text-xs sm:text-sm text-cyan-700 dark:text-cyan-300">
+            <Sparkles className="w-5 h-5 animate-spin text-cyan-500 shrink-0" />
+            <span>🚀 正在根据【作品设定 + 大纲 + SKILL 技能】为您自动扩写《{currentBook.title}》第一章中...</span>
+          </div>
+          <span className="text-xs font-mono text-cyan-600 dark:text-cyan-400 bg-white/60 dark:bg-slate-900/60 px-2.5 py-1 rounded-lg border border-cyan-500/20 shrink-0">
+            {genMeta || 'AI 实时创作中...'}
+          </span>
+        </div>
+      )}
+
       {/* Novel Settings Review Bar (Collapsible) */}
       <div className="glass-panel rounded-3xl overflow-hidden border border-emerald-500/20">
         <button
@@ -958,7 +1022,7 @@ ${chaptersText}`;
 
           <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             <span className="font-bold text-slate-800 dark:text-slate-200 text-xs sm:text-sm shrink-0">
-              {currentChapterIndex + 1} / {currentBook.chapters.length} 章
+              {currentBook.chapters.length === 0 ? 1 : currentChapterIndex + 1} / {currentBook.chapters.length || 1} 章
             </span>
 
             <select
@@ -966,11 +1030,15 @@ ${chaptersText}`;
               onChange={(e) => setCurrentChapterIndex(Number(e.target.value))}
               className="max-w-[110px] sm:max-w-xs truncate px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs cursor-pointer"
             >
-              {currentBook.chapters.map((ch, idx) => (
-                <option key={ch.id} value={idx}>
-                  第 {ch.index} 章: {ch.title}
-                </option>
-              ))}
+              {currentBook.chapters.length === 0 ? (
+                <option value={0}>第 1 章: {chapterTitle || '自动扩写中...'}</option>
+              ) : (
+                currentBook.chapters.map((ch, idx) => (
+                  <option key={ch.id} value={idx}>
+                    第 {ch.index} 章: {ch.title}
+                  </option>
+                ))
+              )}
             </select>
           </div>
 

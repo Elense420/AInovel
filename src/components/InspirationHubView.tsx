@@ -1,7 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { generateUUID } from '../utils/uuid';
-import { Lightbulb, Sparkles, Search, Filter, Plus, Download, Upload, Trash2, Edit3, Check, Link as LinkIcon, BookOpen, X, FileText, ArrowRight, Layers, ArrowUp, ArrowDown, Wand2, CheckSquare, Square, GripVertical } from 'lucide-react';
+import { Lightbulb, Sparkles, Search, Filter, Plus, Download, Upload, Trash2, Edit3, Check, Link as LinkIcon, BookOpen, X, FileText, ArrowRight, Layers, ArrowUp, ArrowDown, Wand2, CheckSquare, Square, GripVertical, Share2, Globe, History, Clock } from 'lucide-react';
 import { InspirationRecord, Book, UiSettings, ApiConfig, IdeaCard } from '../types';
+
+export interface ShareHistoryItem {
+  id: string;
+  createdAt: number;
+  rawText: string;
+  result: {
+    title: string;
+    genre: string;
+    cards: Array<{ category: string; tag: string; content: string }>;
+  };
+}
 import { dbPut, dbGetAll, dbDelete, dbClear, STORE_NAMES } from '../services/db';
 import { chatCompletion } from '../services/apiClient';
 import JSZip from 'jszip';
@@ -83,6 +94,29 @@ export const InspirationHubView: React.FC<InspirationHubViewProps> = ({
   // Download Inspirations Dialog
   const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
   const [selectedDownloadIds, setSelectedDownloadIds] = useState<string[]>([]);
+
+  // Platform Share / Blurb AI Analyzer State
+  const [isShareImportOpen, setIsShareImportOpen] = useState(false);
+  const [shareRawText, setShareRawText] = useState('');
+  const [isAnalyzingShare, setIsAnalyzingShare] = useState(false);
+  const [shareParseResults, setShareParseResults] = useState<{
+    title: string;
+    genre: string;
+    cards: Array<{ category: string; tag: string; content: string }>;
+  } | null>(null);
+
+  // History State for Share Parse
+  const [shareHistory, setShareHistory] = useState<ShareHistoryItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('novel_share_parse_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      console.error('Failed to parse share parse history', e);
+      return [];
+    }
+  });
+  const [shareModalTab, setShareModalTab] = useState<'parse' | 'history'>('parse');
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
 
   useEffect(() => {
     loadRecords();
@@ -231,6 +265,174 @@ ${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : '
     } finally {
       setIsConvertingCards(false);
     }
+  };
+
+  // AI Analyze External Novel Share Text / Blurb
+  const handleAnalyzeShareText = async () => {
+    if (!shareRawText.trim()) {
+      alert('请先粘贴或输入来自小说平台的分享口令、链接或文案简介！');
+      return;
+    }
+
+    const inspCfg = configs.find((c) => c.id === uiSettings.inspirationApiCfgId) || configs[0];
+    const modelToUse = uiSettings.inspirationApiModel || 'gemini-3.6-flash';
+
+    setIsAnalyzingShare(true);
+    setStatusMessage('🔍 AI 正在深度智能解析第三方小说平台简介与分享文案...');
+
+    try {
+      const systemPrompt = `你是一名顶级小说创意拆解与爆点提炼专家。用户会提供来自其他小说平台（如晋江、书耽、番茄、起点、刺猬猫、长佩、微信公众号等）的分享口令、简介、推荐文案或包含链接的文字。
+你的任务是：
+1. 识别或推断小说的【书名】(title) 和【题材分类】(genre)。
+2. 将文案中的简介、看点、人设与冲突深度拆解为多条结构化的【灵感点子卡片】(cards)，每条卡片包含：
+   - category: 必须从 ["核心爆点", "角色设定", "金手指/机制", "世界观法则", "题材梗概", "收集箱"] 中选择。
+   - tag: 概括该卡片的简短标签（如："破镜重圆", "人设反差", "追妻火葬场", "系统抽卡", "双向奔赴", "名场面"）。
+   - content: 提炼出的独立灵感描述（语言生动、重点突出，便于后续写作参考）。
+
+请严格只返回可解析的 JSON 字符串，格式如下（不要带有任何其他无关字样）：
+{
+  "title": "提取到的书名",
+  "genre": "题材类型",
+  "cards": [
+    { "category": "核心爆点", "tag": "人设反差", "content": "..." },
+    { "category": "角色设定", "tag": "主角性格", "content": "..." },
+    { "category": "金手指/机制", "tag": "核心机制", "content": "..." }
+  ]
+}`;
+
+      const res = await chatCompletion({
+        provider: inspCfg?.provider,
+        baseUrl: inspCfg?.baseUrl,
+        apiKey: inspCfg?.apiKey,
+        model: modelToUse,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `请拆解分析以下平台分享文案与简介：\n\n${shareRawText.trim()}` },
+        ],
+        temperature: 0.7,
+      });
+
+      let jsonStr = res.content.trim();
+      const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (match) {
+        jsonStr = match[1];
+      }
+
+      const parsed = JSON.parse(jsonStr);
+      if (parsed && Array.isArray(parsed.cards)) {
+        setShareParseResults(parsed);
+        setStatusMessage(`✅ 成功解析《${parsed.title || '外部作品'}》，已自动拆解出 ${parsed.cards.length} 条看点卡片！`);
+
+        // Automatically append to history
+        const newHistItem: ShareHistoryItem = {
+          id: generateUUID(),
+          createdAt: Date.now(),
+          rawText: shareRawText.trim(),
+          result: parsed,
+        };
+        const updatedHistory = [newHistItem, ...shareHistory.filter((h) => h.rawText !== shareRawText.trim())];
+        setShareHistory(updatedHistory);
+        setSelectedHistoryId(newHistItem.id);
+        try {
+          localStorage.setItem('novel_share_parse_history', JSON.stringify(updatedHistory));
+        } catch (e) {
+          console.error('Failed to save share parse history', e);
+        }
+      } else {
+        throw new Error('解析格式未能匹配预期 JSON 结构');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setStatusMessage(`解析失败: ${err.message || '网络连接或 AI 响应格式异常'}`);
+    } finally {
+      setIsAnalyzingShare(false);
+    }
+  };
+
+  // Select History Item
+  const handleSelectHistoryItem = (item: ShareHistoryItem) => {
+    setSelectedHistoryId(item.id);
+    setShareRawText(item.rawText);
+    setShareParseResults(item.result);
+  };
+
+  // Delete History Item
+  const handleDeleteHistoryItem = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = shareHistory.filter((h) => h.id !== id);
+    setShareHistory(updated);
+    try {
+      localStorage.setItem('novel_share_parse_history', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to update share parse history after delete', e);
+    }
+    if (selectedHistoryId === id) {
+      if (updated.length > 0) {
+        handleSelectHistoryItem(updated[0]);
+      } else {
+        setSelectedHistoryId(null);
+        setShareParseResults(null);
+      }
+    }
+  };
+
+  // Clear All History
+  const handleClearShareHistory = () => {
+    if (confirm('确定要清空所有拆解历史记录吗？')) {
+      setShareHistory([]);
+      setSelectedHistoryId(null);
+      setShareParseResults(null);
+      localStorage.removeItem('novel_share_parse_history');
+    }
+  };
+
+  // Confirm import cards to deck
+  const handleImportParsedCardsToDeck = () => {
+    if (!shareParseResults || !shareParseResults.cards) return;
+
+    const newCards: IdeaCard[] = shareParseResults.cards.map((c, i) => ({
+      id: generateUUID(),
+      content: c.content,
+      tag: c.tag || '外部灵感',
+      category: c.category || '收集箱',
+      order: ideaCards.length + i,
+      createdAt: Date.now() - i * 10,
+    }));
+
+    const updated = [...newCards, ...ideaCards];
+    saveIdeaCards(updated);
+    setIsShareImportOpen(false);
+    setShareRawText('');
+    setShareParseResults(null);
+    setStatusMessage(`🎉 已成功将《${shareParseResults.title || '外部灵感'}》拆解出的 ${newCards.length} 条灵感卡片自动新建并保存至【灵感卡片堆叠库】！`);
+  };
+
+  // Confirm convert parsed result to Inspiration Record (Novel Outline)
+  const handleConvertParsedToRecord = async () => {
+    if (!shareParseResults) return;
+
+    const cardsText = shareParseResults.cards.map((c, i) => `${i + 1}. [${c.category}] (${c.tag}): ${c.content}`).join('\n');
+    const newRecord: InspirationRecord = {
+      id: generateUUID(),
+      createdAt: Date.now(),
+      title: shareParseResults.title || '来自平台拆解的小说灵感',
+      genre: shareParseResults.genre || '外部借鉴',
+      style: '爆款抓人文风',
+      world: `【核心看点与世界观拆解】\n${cardsText}`,
+      characters: shareParseResults.cards.filter(c => c.category === '角色设定').map(c => `- ${c.tag}: ${c.content}`).join('\n') || '尚待进一步充实',
+      outline: `【拆解主线剧情与梗概】\n${cardsText}`,
+      rawContent: shareRawText,
+      linkedNovels: [],
+    };
+
+    await dbPut(STORE_NAMES.INSPIRATION_RECORDS, newRecord);
+    await loadRecords();
+    setIsShareImportOpen(false);
+    setShareRawText('');
+    setShareParseResults(null);
+    setSelectedRecord(newRecord);
+    setSubTab('records');
+    setStatusMessage(`🎉 已将《${newRecord.title}》解析结果直接保存为【完整小说灵感预设】！`);
   };
 
   useEffect(() => {
@@ -713,6 +915,14 @@ ${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : '
                   <Square className="w-4 h-4 text-slate-400" />
                 )}
                 <span>全选 ({selectedCardIds.length}/{ideaCards.length})</span>
+              </button>
+
+              <button
+                onClick={() => setIsShareImportOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white text-xs font-semibold transition-all shadow-sm shadow-blue-500/20 flex items-center gap-1.5"
+              >
+                <Globe className="w-4 h-4" />
+                <span>🌐 贴入平台口令/简介 AI拆解</span>
               </button>
             </div>
 
@@ -1351,6 +1561,297 @@ ${xpPreferences ? `# 用户 XP 偏好与避雷要求：\n${xpPreferences}\n` : '
               >
                 确认下载 ({selectedDownloadIds.length})
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Platform Share / Blurb AI Analyzer Modal */}
+      {isShareImportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md animate-fade-in">
+          <div className="glass-panel w-full max-w-2xl rounded-3xl overflow-hidden p-6 sm:p-8 space-y-5 max-h-[90vh] flex flex-col justify-between border border-slate-200 dark:border-slate-800 shadow-2xl">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/60 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white flex items-center justify-center font-bold shadow-md shadow-blue-500/20 shrink-0">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg flex items-center gap-2">
+                    <span>小说平台简介 / 分享口令 AI 智能拆解</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                      支持晋江/番茄/书耽/起点等
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    自动拆解第三方作品看点卡片，随时重温与一键存入库
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center">
+                {/* Sub-tabs */}
+                <div className="p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/60 flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setShareModalTab('parse')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      shareModalTab === 'parse'
+                        ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    <span>智能拆解</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShareModalTab('history')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                      shareModalTab === 'history'
+                        ? 'bg-white dark:bg-slate-700 text-cyan-600 dark:text-cyan-400 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>历史记录</span>
+                    {shareHistory.length > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-600 dark:text-cyan-300">
+                        {shareHistory.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setIsShareImportOpen(false);
+                    setShareRawText('');
+                    setShareParseResults(null);
+                  }}
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+              {shareModalTab === 'parse' ? (
+                /* TAB 1: PARSE INPUT */
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                        📋 粘贴分享文案 / 简介 / 口令 / 带有链接的文本：
+                      </label>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShareRawText(
+                              `【番茄小说】《破产后我成了前夫的顶头上司》\n简介：沈知意与裴修离异三年后在商界重逢。曾经高不可攀的前夫如今成了她的麾下下属，而沈知意手握绝密核心技术，全行业都在讨好她。原以为这只是一场职场复仇，谁知前夫半夜把她堵在办公室门口，红着眼求她看一眼三年前的真相……\n标签：破镜重圆 职场爽文 人设反差 追妻火葬场 强强`
+                            )
+                          }
+                          className="text-[11px] text-cyan-600 dark:text-cyan-400 hover:underline"
+                        >
+                          填入示例1(番茄/晋江)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setShareRawText(
+                              `书名：《全宗门只有我是废柴吗》\n文案：修仙界第一大宗门的小师妹林栀，天生废柴体质无缘成仙，却意外绑定了【吐槽致富系统】。只要当面向高冷宗主和绝世天才们吐槽，就能按情绪值换取顶级神器！宗主表白现场被她一句话破坏，全宗门爆笑如雷……\n分类：修仙 搞笑系统 团宠 脑洞`
+                            )
+                          }
+                          className="text-[11px] text-cyan-600 dark:text-cyan-400 hover:underline"
+                        >
+                          填入示例2(系统脑洞)
+                        </button>
+                      </div>
+                    </div>
+                    <textarea
+                      rows={4}
+                      value={shareRawText}
+                      onChange={(e) => setShareRawText(e.target.value)}
+                      placeholder="在此处直接粘贴从晋江、番茄、书耽、起点等小说的分享口令或简介文本...&#10;（例：【晋江文学城】《书名》简介：... 链接：https://...）"
+                      className="w-full p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-cyan-500 leading-relaxed"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      disabled={isAnalyzingShare || !shareRawText.trim()}
+                      onClick={handleAnalyzeShareText}
+                      className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500 hover:from-blue-600 hover:to-teal-600 text-white font-bold text-xs sm:text-sm shadow-md shadow-cyan-500/20 transition-all flex items-center gap-2 disabled:opacity-40"
+                    >
+                      <Wand2 className={`w-4 h-4 ${isAnalyzingShare ? 'animate-spin' : ''}`} />
+                      <span>{isAnalyzingShare ? 'AI 智能分析中...' : '🤖 开始 AI 深度拆解提取'}</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* TAB 2: HISTORY RECORDS */
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pb-1">
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-cyan-500" />
+                      <span>历史拆解解析记录 (点击任意条目即可查看与保存)</span>
+                    </span>
+                    {shareHistory.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleClearShareHistory}
+                        className="text-[11px] text-rose-500 hover:text-rose-600 dark:hover:text-rose-400 flex items-center gap-1 font-semibold"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>清空历史</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {shareHistory.length === 0 ? (
+                    <div className="p-8 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+                      <History className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        暂无历史拆解记录
+                      </p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
+                        在“智能拆解”页粘贴小说口令并分析后，所有解析结果将自动保存在此处，防止误关遗失。
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                      {shareHistory.map((item) => {
+                        const isSelected = selectedHistoryId === item.id;
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => handleSelectHistoryItem(item)}
+                            className={`p-3 rounded-2xl border cursor-pointer transition-all relative group ${
+                              isSelected
+                                ? 'bg-cyan-500/10 border-cyan-500/60 shadow-xs'
+                                : 'bg-white/80 dark:bg-slate-900/80 border-slate-200 dark:border-slate-800 hover:border-cyan-500/40'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="space-y-1 min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate max-w-[140px]">
+                                    《{item.result.title || '外部作品'}》
+                                  </span>
+                                  {item.result.genre && (
+                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-cyan-500/15 text-cyan-600 dark:text-cyan-400">
+                                      {item.result.genre}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                  {item.rawText}
+                                </p>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                  <span>{new Date(item.createdAt).toLocaleDateString()} {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                  <span>•</span>
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                                    {item.result.cards?.length || 0} 条卡片
+                                  </span>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                title="删除此记录"
+                                onClick={(e) => handleDeleteHistoryItem(item.id, e)}
+                                className="p-1 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-all"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Parsed Result Display Area */}
+              {shareParseResults && (
+                <div className="p-4 sm:p-5 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 space-y-3.5 animate-fade-in mt-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-500/20 pb-2.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">解析作品展示：</span>
+                      <span className="text-base font-bold text-slate-800 dark:text-slate-100">
+                        《{shareParseResults.title || '未知作品'}》
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-xs bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 font-semibold">
+                        {shareParseResults.genre || '未名题材'}
+                      </span>
+                    </div>
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                      共拆解出 {shareParseResults.cards?.length || 0} 条看点卡片
+                    </span>
+                  </div>
+
+                  {/* Cards List Preview */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                    {shareParseResults.cards?.map((c, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1.5"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                            {c.category}
+                          </span>
+                          <span className="text-[10px] font-semibold text-cyan-600 dark:text-cyan-400">
+                            #{c.tag}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-800 dark:text-slate-200 leading-snug">
+                          {c.content}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer buttons */}
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-3.5 border-t border-slate-200/60 dark:border-slate-800">
+              <button
+                onClick={() => {
+                  setIsShareImportOpen(false);
+                  setShareRawText('');
+                  setShareParseResults(null);
+                }}
+                className="px-4 py-2 rounded-xl text-xs text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
+              >
+                关闭
+              </button>
+
+              {shareParseResults && (
+                <>
+                  <button
+                    onClick={handleConvertParsedToRecord}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-semibold transition-all flex items-center gap-1.5"
+                  >
+                    <BookOpen className="w-4 h-4 text-emerald-400" />
+                    <span>转存为完整小说灵感预设</span>
+                  </button>
+
+                  <button
+                    onClick={handleImportParsedCardsToDeck}
+                    className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold transition-all shadow-md shadow-emerald-500/20 flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>一键保存拆解卡片至【灵感卡片堆叠库】 ({shareParseResults.cards?.length || 0})</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

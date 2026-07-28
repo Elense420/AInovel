@@ -161,7 +161,7 @@ export const WriterView: React.FC<WriterViewProps> = ({
 }) => {
   const [isReviewOpen, setIsOutlineReviewOpen] = useState(false);
   const [isRewriteOpen, setIsRewriteOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(true);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // New Feature States: Climax Multiplier & Focus Reading Mode
   const [climaxMultiplierEnabled, setClimaxMultiplierEnabled] = useState(false);

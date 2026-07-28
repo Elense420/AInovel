@@ -203,161 +203,29 @@ export const WriterView: React.FC<WriterViewProps> = ({
 
   const autoStartedBookIdsRef = useRef<Set<string>>(new Set());
 
-  // Auto-trigger Chapter 1 expansion when creating/opening a new book without chapters
-  useEffect(() => {
-    if (
-      currentBook &&
-      currentBook.chapters.length === 0 &&
-      !isGenerating &&
-      !autoStartedBookIdsRef.current.has(currentBook.id)
-    ) {
-      autoStartedBookIdsRef.current.add(currentBook.id);
-      setChapterTitle('第一章：正在由 AI 自动扩写中...');
-      setChapterText('');
-      handleGenerateNextChapter('', false);
-    }
-  }, [currentBook?.id, currentBook?.chapters?.length]);
-
-  // Sync state when active chapter changes
-  useEffect(() => {
-    if (activeChapter) {
-      const parsed = parseChapterAndSuggestions(activeChapter.text || '', activeChapter.title || `第 ${currentChapterIndex + 1} 章`);
-      setChapterTitle(activeChapter.title || parsed.title);
-      setChapterText(parsed.bodyText);
-      setGenMeta(activeChapter.meta || '');
-      setNextPlotInput(activeChapter.userNextPlotInput || '');
-      isInitialChapterLoadRef.current = true;
-      setAutoSaveStatus('idle');
-      setShowAutoSaveToast(false);
-    } else if (!isGenerating) {
-      setChapterTitle('');
-      setChapterText('');
-      setGenMeta('');
-      setNextPlotInput('');
-    }
-  }, [currentChapterIndex, currentBook?.id, Boolean(activeChapter)]);
-
-  // Debounced auto-save effect
-  useEffect(() => {
-    if (!currentBook || !activeChapter) return;
-
-    // Skip auto-save on initial chapter selection
-    if (isInitialChapterLoadRef.current) {
-      isInitialChapterLoadRef.current = false;
-      return;
-    }
-
-    // Skip during active AI generation streaming
-    if (isGenerating) return;
-
-    // Check if there is actual content change compared to activeChapter
-    const titleChanged = chapterTitle !== (activeChapter.title || '');
-    const textChanged = chapterText !== (activeChapter.text || '');
-
-    if (!titleChanged && !textChanged) return;
-
-    setAutoSaveStatus('saving');
-
-    const timer = setTimeout(async () => {
-      try {
-        const updatedChapters = [...currentBook.chapters];
-        const target = updatedChapters[currentChapterIndex];
-
-        if (target) {
-          target.title = chapterTitle.trim();
-          target.text = chapterText.trim();
-          target.meta = `自动保存于 ${new Date().toLocaleTimeString()}`;
-
-          const updatedBook: Book = {
-            ...currentBook,
-            chapters: updatedChapters,
-            lastModifiedAt: Date.now(),
-          };
-
-          await onSaveBook(updatedBook); // Triggers dbPut!
-          const saveTime = new Date().toLocaleTimeString();
-          setLastAutoSavedTime(saveTime);
-          setAutoSaveStatus('saved');
-          setShowAutoSaveToast(true);
-
-          setTimeout(() => {
-            setShowAutoSaveToast(false);
-          }, 2500);
-        }
-      } catch (err) {
-        console.error('Auto save error:', err);
-        setAutoSaveStatus('idle');
-      }
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, [chapterTitle, chapterText]);
-
-  if (!currentBook) {
-    return (
-      <div className="glass-panel p-12 rounded-3xl text-center space-y-4 max-w-xl mx-auto my-12">
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
-          <AlertCircle className="w-8 h-8" />
-        </div>
-        <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-          尚未打开或创建小说作品
-        </h3>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          请先去「我的书库」选择一本现有作品，或在「写作设定」中创建新作品并扩写第一章。
-        </p>
-        <button
-          onClick={onGoToSetup}
-          className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
-        >
-          去设定新小说
-        </button>
-      </div>
-    );
-  }
-
-  if (currentBook.chapters.length === 0 && !isGenerating && !chapterText) {
-    return (
-      <div className="glass-panel p-10 sm:p-12 rounded-3xl text-center space-y-5 max-w-2xl mx-auto my-8 border border-emerald-500/20 animate-fade-in">
-        <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shadow-inner">
-          <Sparkles className="w-8 h-8 animate-bounce" />
-        </div>
-        <div>
-          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">
-            《{currentBook.title}》准备自动扩写第一章
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            作品设定、大纲与 SKILL 规则已载入。点击下方按钮即可立即调用 AI 模型自动扩写第一章！
-          </p>
-        </div>
-
-        <div className="flex items-center justify-center gap-3 pt-2">
-          <button
-            onClick={onGoToSetup}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium text-xs sm:text-sm transition-all cursor-pointer"
-          >
-            ⚙️ 修改写作设定
-          </button>
-          <button
-            onClick={() => handleGenerateNextChapter('', false)}
-            className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs sm:text-sm transition-all shadow-lg shadow-emerald-500/25 flex items-center gap-2 cursor-pointer"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>🚀 自动扩写第一章</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Calculate total word count across all chapters
-  const totalWordCount = (currentBook.chapters || []).reduce(
-    (acc, ch) => acc + (ch.text?.length || 0),
-    0
-  );
-
   // Get active API line and model info
   const writerCfg = configs.find((c) => c.id === uiSettings.writerApiCfgId) || configs[0];
   const activeModelName = uiSettings.writerApiModel || 'gemini-3.6-flash';
+
+  // Build Context memory text
+  const buildMemoryContext = () => {
+    if (!currentBook) return '';
+    const memoryCount = Number(currentBook.settings?.contextMemory || 3);
+    if (memoryCount <= 0 || !currentBook.chapters || currentBook.chapters.length === 0) return '';
+
+    const recentChapters = currentBook.chapters.slice(-memoryCount);
+    const parts: string[] = [];
+
+    recentChapters.forEach((ch, idx) => {
+      if (idx === recentChapters.length - 1) {
+        parts.push(`【第${ch.index}章回顾 (完整)】\n${ch.text}`);
+      } else {
+        parts.push(`【第${ch.index}章回顾 (前500字摘要)】\n${ch.text.substring(0, 500)}...`);
+      }
+    });
+
+    return parts.join('\n\n');
+  };
 
   // Save edits on title/content
   const handleSaveChapterEdits = async () => {
@@ -407,33 +275,14 @@ export const WriterView: React.FC<WriterViewProps> = ({
     }
   };
 
-  // Build Context memory text
-  const buildMemoryContext = () => {
-    const memoryCount = Number(currentBook.settings?.contextMemory || 3);
-    if (memoryCount <= 0 || currentBook.chapters.length === 0) return '';
-
-    const recentChapters = currentBook.chapters.slice(-memoryCount);
-    const parts: string[] = [];
-
-    recentChapters.forEach((ch, idx) => {
-      if (idx === recentChapters.length - 1) {
-        parts.push(`【第${ch.index}章回顾 (完整)】\n${ch.text}`);
-      } else {
-        parts.push(`【第${ch.index}章回顾 (前500字摘要)】\n${ch.text.substring(0, 500)}...`);
-      }
-    });
-
-    return parts.join('\n\n');
-  };
-
   // Generate Next Chapter / Rewrite Chapter core flow
   const handleGenerateNextChapter = async (plotHint: string = '', isRewrite: boolean = false) => {
-    if (isGenerating) return;
+    if (!currentBook || isGenerating) return;
 
     setIsGenerating(true);
     setGenMeta('🚀 正在请求 AI 创作中...');
 
-    let chapterIndexToGen = currentBook.chapters.length + 1;
+    let chapterIndexToGen = (currentBook.chapters?.length || 0) + 1;
     if (isRewrite) {
       chapterIndexToGen = currentChapterIndex + 1;
     }
@@ -632,6 +481,158 @@ export const WriterView: React.FC<WriterViewProps> = ({
       setIsGenerating(false);
     }
   };
+
+  // Auto-trigger Chapter 1 expansion when creating/opening a new book without chapters
+  useEffect(() => {
+    if (
+      currentBook &&
+      currentBook.chapters.length === 0 &&
+      !isGenerating &&
+      !autoStartedBookIdsRef.current.has(currentBook.id)
+    ) {
+      autoStartedBookIdsRef.current.add(currentBook.id);
+      setChapterTitle('第一章：正在由 AI 自动扩写中...');
+      setChapterText('');
+      handleGenerateNextChapter('', false);
+    }
+  }, [currentBook?.id, currentBook?.chapters?.length]);
+
+  // Sync state when active chapter changes
+  useEffect(() => {
+    if (activeChapter) {
+      const parsed = parseChapterAndSuggestions(activeChapter.text || '', activeChapter.title || `第 ${currentChapterIndex + 1} 章`);
+      setChapterTitle(activeChapter.title || parsed.title);
+      setChapterText(parsed.bodyText);
+      setGenMeta(activeChapter.meta || '');
+      setNextPlotInput(activeChapter.userNextPlotInput || '');
+      isInitialChapterLoadRef.current = true;
+      setAutoSaveStatus('idle');
+      setShowAutoSaveToast(false);
+    } else if (!isGenerating) {
+      setChapterTitle('');
+      setChapterText('');
+      setGenMeta('');
+      setNextPlotInput('');
+    }
+  }, [currentChapterIndex, currentBook?.id, Boolean(activeChapter)]);
+
+  // Debounced auto-save effect
+  useEffect(() => {
+    if (!currentBook || !activeChapter) return;
+
+    // Skip auto-save on initial chapter selection
+    if (isInitialChapterLoadRef.current) {
+      isInitialChapterLoadRef.current = false;
+      return;
+    }
+
+    // Skip during active AI generation streaming
+    if (isGenerating) return;
+
+    // Check if there is actual content change compared to activeChapter
+    const titleChanged = chapterTitle !== (activeChapter.title || '');
+    const textChanged = chapterText !== (activeChapter.text || '');
+
+    if (!titleChanged && !textChanged) return;
+
+    setAutoSaveStatus('saving');
+
+    const timer = setTimeout(async () => {
+      try {
+        const updatedChapters = [...currentBook.chapters];
+        const target = updatedChapters[currentChapterIndex];
+
+        if (target) {
+          target.title = chapterTitle.trim();
+          target.text = chapterText.trim();
+          target.meta = `自动保存于 ${new Date().toLocaleTimeString()}`;
+
+          const updatedBook: Book = {
+            ...currentBook,
+            chapters: updatedChapters,
+            lastModifiedAt: Date.now(),
+          };
+
+          await onSaveBook(updatedBook); // Triggers dbPut!
+          const saveTime = new Date().toLocaleTimeString();
+          setLastAutoSavedTime(saveTime);
+          setAutoSaveStatus('saved');
+          setShowAutoSaveToast(true);
+
+          setTimeout(() => {
+            setShowAutoSaveToast(false);
+          }, 2500);
+        }
+      } catch (err) {
+        console.error('Auto save error:', err);
+        setAutoSaveStatus('idle');
+      }
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [chapterTitle, chapterText]);
+
+  if (!currentBook) {
+    return (
+      <div className="glass-panel p-12 rounded-3xl text-center space-y-4 max-w-xl mx-auto my-12">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+          尚未打开或创建小说作品
+        </h3>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          请先去「我的书库」选择一本现有作品，或在「写作设定」中创建新作品并扩写第一章。
+        </p>
+        <button
+          onClick={onGoToSetup}
+          className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-medium text-sm transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+        >
+          去设定新小说
+        </button>
+      </div>
+    );
+  }
+
+  if (currentBook.chapters.length === 0 && !isGenerating && !chapterText) {
+    return (
+      <div className="glass-panel p-10 sm:p-12 rounded-3xl text-center space-y-5 max-w-2xl mx-auto my-8 border border-emerald-500/20 animate-fade-in">
+        <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center shadow-inner">
+          <Sparkles className="w-8 h-8 animate-bounce" />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-1">
+            《{currentBook.title}》准备自动扩写第一章
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+            作品设定、大纲与 SKILL 规则已载入。点击下方按钮即可立即调用 AI 模型自动扩写第一章！
+          </p>
+        </div>
+
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            onClick={onGoToSetup}
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium text-xs sm:text-sm transition-all cursor-pointer"
+          >
+            ⚙️ 修改写作设定
+          </button>
+          <button
+            onClick={() => handleGenerateNextChapter('', false)}
+            className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs sm:text-sm transition-all shadow-lg shadow-emerald-500/25 flex items-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>🚀 自动扩写第一章</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate total word count across all chapters
+  const totalWordCount = (currentBook.chapters || []).reduce(
+    (acc, ch) => acc + (ch.text?.length || 0),
+    0
+  );
 
   // Reroll Plot Suggestions
   const handleRerollSuggestions = async () => {

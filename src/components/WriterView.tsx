@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -27,7 +27,7 @@ import {
   BookOpenText,
   Zap,
 } from 'lucide-react';
-import { Book, Chapter, UiSettings, ApiConfig } from '../types';
+import { Book, Chapter, UiSettings, ApiConfig, IdeaCard } from '../types';
 import { streamChatCompletion, chatCompletion } from '../services/apiClient';
 import { generateUUID } from '../utils/uuid';
 
@@ -176,6 +176,52 @@ export const WriterView: React.FC<WriterViewProps> = ({
   // Plot inputs
   const [rewritePlotInput, setRewritePlotInput] = useState('');
   const [nextPlotInput, setNextPlotInput] = useState('');
+
+  // Idea Cards Overlay State for Continuation Module
+  const [ideaCards, setIdeaCards] = useState<IdeaCard[]>([]);
+  const [selectedIdeaCardIds, setSelectedIdeaCardIds] = useState<string[]>([]);
+  const [ideaCategoryFilter, setIdeaCategoryFilter] = useState<string>('核心爆点');
+  const [isIdeaCardsSectionOpen, setIsIdeaCardsSectionOpen] = useState(false);
+
+  useEffect(() => {
+    const loadIdeaCards = () => {
+      try {
+        const saved = localStorage.getItem('ai_novelist_idea_cards');
+        if (saved) {
+          setIdeaCards(JSON.parse(saved));
+          return;
+        }
+      } catch (e) {
+        console.error('Failed to parse idea cards in WriterView', e);
+      }
+      setIdeaCards([
+        { id: '1', content: '高冷仙尊误喝真言水，在全宗门面前对废柴徒弟真情告白', tag: '名场面梗', category: '核心爆点', order: 0, createdAt: Date.now() },
+        { id: '2', content: '表面上是人畜无害的小助理，暗地里是操控幕后资本的顶级黑客', tag: '人设反差', category: '角色设定', order: 1, createdAt: Date.now() - 1000 },
+        { id: '3', content: '必须靠吸收别人的负面情绪当灵气修炼，满世界嘴炮吐槽', tag: '金手指 Hook', category: '金手指/机制', order: 2, createdAt: Date.now() - 2000 },
+      ]);
+    };
+    loadIdeaCards();
+  }, []);
+
+  const filteredIdeaCards = useMemo(() => {
+    if (ideaCategoryFilter === '全部') return ideaCards;
+    return ideaCards.filter((card) => (card.category || '收集箱') === ideaCategoryFilter);
+  }, [ideaCards, ideaCategoryFilter]);
+
+  const handleToggleIdeaCard = (id: string) => {
+    setSelectedIdeaCardIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleAppendSelectedCardsToInput = () => {
+    const selectedCards = ideaCards.filter((c) => selectedIdeaCardIds.includes(c.id));
+    if (selectedCards.length === 0) return;
+
+    const cardText = selectedCards.map((c) => `【${c.category || '爆点'}-${c.tag || '灵感'}】${c.content}`).join('；');
+    const updatedInput = nextPlotInput ? `${nextPlotInput.trim()}\n【爆点卡片】：${cardText}` : `【爆点卡片】：${cardText}`;
+    handleSaveNextPlotInput(updatedInput);
+  };
 
   // Generation status & Pop-up Modal State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -349,8 +395,21 @@ export const WriterView: React.FC<WriterViewProps> = ({
     if (memory) {
       userPrompt += `\n\n为保证章节承接连贯，以下是最近章节回顾：\n${memory}\n`;
     }
-    if (plotHint) {
-      userPrompt += `\n本章核心剧情重点提示 (请优先围绕此展开)：${plotHint}\n`;
+
+    // Combine user plot hint with selected idea cards
+    let combinedPlotHint = (plotHint || nextPlotInput || '').trim();
+    const selectedCards = ideaCards.filter((c) => selectedIdeaCardIds.includes(c.id));
+    if (selectedCards.length > 0) {
+      const cardsText = selectedCards
+        .map((c) => `- 【${c.category || '核心爆点'}】(${c.tag || '爆点'}): ${c.content}`)
+        .join('\n');
+      combinedPlotHint = combinedPlotHint
+        ? `${combinedPlotHint}\n\n# ⚡ 必须融合叠加的【核心爆点/灵感卡片】：\n${cardsText}`
+        : `# ⚡ 必须融合叠加的【核心爆点/灵感卡片】：\n${cardsText}`;
+    }
+
+    if (combinedPlotHint) {
+      userPrompt += `\n本章核心剧情重点提示 (包含用户指定的剧情走向与核心爆点要素，请优先融入展开)：\n${combinedPlotHint}\n`;
     }
 
     userPrompt += `\n输出格式规范（必须严格遵守，绝对不要遗漏分隔符）：
@@ -1099,47 +1158,6 @@ ${chaptersText}`;
           )}
         </div>
 
-        {/* Chapter Rewrite Section */}
-        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-500/10 overflow-hidden">
-          <button
-            onClick={() => setIsRewriteOpen(!isRewriteOpen)}
-            className="w-full px-5 py-3 flex items-center justify-between text-left font-bold text-rose-700 dark:text-rose-300 text-xs sm:text-sm hover:bg-rose-500/10 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <RefreshCw className="w-4 h-4" />
-              <span>✒️ 重写当前第 {currentChapterIndex + 1} 章</span>
-            </div>
-            <span>{isRewriteOpen ? '折叠' : '展开'}</span>
-          </button>
-
-          {isRewriteOpen && (
-            <div className="p-5 border-t border-rose-500/20 space-y-3">
-              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                请输入本章重写的新剧情走向与要求 (重写后旧版本自动归入历史存档)：
-              </label>
-              <textarea
-                rows={3}
-                value={rewritePlotInput}
-                onChange={(e) => setRewritePlotInput(e.target.value)}
-                placeholder="填写重写要点，例如：改变对峙结局，让主角机智脱身而非受伤..."
-                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-rose-500/50"
-              />
-              <button
-                disabled={isGenerating}
-                onClick={() => {
-                  if (confirm(`确认要重写第 ${currentChapterIndex + 1} 章吗？当前版本将被放入历史存档。`)) {
-                    handleGenerateNextChapter(rewritePlotInput, true);
-                  }
-                }}
-                className="px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium text-xs shadow-md shadow-rose-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>确认重写本章</span>
-              </button>
-            </div>
-          )}
-        </div>
-
         {/* Continuation Container (only visible on last chapter) */}
         {isLastChapter && (
           <div className="space-y-6 pt-4 border-t border-slate-200/80 dark:border-slate-800">
@@ -1148,26 +1166,26 @@ ${chaptersText}`;
               <span>后续章节创作与方向选择</span>
             </h3>
 
-            {/* Next Chapter Plot Input */}
+            {/* 1. Next Chapter Plot Input */}
             <div className="space-y-2">
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                下一章剧情走向 (可选，支持选择下方 AI 建议或手动填写)：
+                下一章剧情走向 (可选，支持结合下方【AI建议】与【核心爆点】卡片)：
               </label>
               <textarea
                 rows={3}
                 value={nextPlotInput}
                 onChange={(e) => handleSaveNextPlotInput(e.target.value)}
-                placeholder="填写后点击“继续扩写下一章”。此内容将作为关键线索引表达..."
+                placeholder="填写后点击“继续扩写下一章”。此处支持手动输入，也可点击下方AI建议或灵感卡片快速叠加..."
                 className="w-full p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500/50 focus:outline-hidden"
               />
             </div>
 
-            {/* AI Plot Directions/Suggestions */}
+            {/* 2. AI Plot Directions/Suggestions */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>AI 给出的后续灵感方向 (点击填充)</span>
+                  <span>AI 给出的后续灵感方向 (点击可覆盖或追加)</span>
                 </h4>
 
                 {activeChapter?.allSuggestions && activeChapter.allSuggestions.length > 0 && (
@@ -1203,15 +1221,31 @@ ${chaptersText}`;
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {group.suggestions.map((opt, optIdx) => (
-                          <button
+                          <div
                             key={optIdx}
-                            onClick={() => handleSaveNextPlotInput(opt)}
-                            className="p-3 rounded-xl border border-slate-200/60 dark:border-slate-800 bg-white/80 dark:bg-slate-800/80 hover:bg-emerald-500/10 hover:border-emerald-500/40 text-left transition-all text-xs text-slate-700 dark:text-slate-200 leading-relaxed group"
+                            className="p-3 rounded-xl border border-slate-200/60 dark:border-slate-800 bg-white/80 dark:bg-slate-800/80 hover:border-emerald-500/40 transition-all text-xs text-slate-700 dark:text-slate-200 leading-relaxed group flex flex-col justify-between space-y-2"
                           >
-                            <span className="group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-                              {opt}
-                            </span>
-                          </button>
+                            <span>{opt}</span>
+                            <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-slate-100 dark:border-slate-700/60 opacity-90 group-hover:opacity-100">
+                              <button
+                                type="button"
+                                onClick={() => handleSaveNextPlotInput(opt)}
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                              >
+                                填入覆盖
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = nextPlotInput ? `${nextPlotInput.trim()}\n【叠加AI建议】：${opt}` : opt;
+                                  handleSaveNextPlotInput(updated);
+                                }}
+                                className="px-2 py-0.5 rounded text-[10px] font-semibold bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-600 dark:text-cyan-400"
+                              >
+                                ➕ 叠加追加
+                              </button>
+                            </div>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -1236,7 +1270,150 @@ ${chaptersText}`;
               )}
             </div>
 
-            {/* Continuation Action Buttons */}
+            {/* 3. Idea Cards Selection for Climax & Plot Overlay (Placed AFTER AI Suggestions, Default Collapsed) */}
+            <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 via-orange-500/5 to-yellow-500/5 dark:from-amber-950/20 dark:via-orange-950/20 dark:to-yellow-950/20 overflow-hidden transition-all">
+              {/* Collapsible Header */}
+              <button
+                type="button"
+                onClick={() => setIsIdeaCardsSectionOpen(!isIdeaCardsSectionOpen)}
+                className="w-full p-4 flex items-center justify-between gap-2 text-left hover:bg-amber-500/10 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold shrink-0">
+                    <Flame className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      <span>从灵感卡片选择【核心爆点】</span>
+                      {selectedIdeaCardIds.length > 0 && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-xs">
+                          已叠加 {selectedIdeaCardIds.length} 项
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      点击展开从卡片库勾选爆点，生成时将与手动建议/AI建议同时生效叠加
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-xs text-amber-600 dark:text-amber-400 font-semibold">
+                    {isIdeaCardsSectionOpen ? '折叠卡片库' : '展开选择卡片'}
+                  </span>
+                  <ChevronDown
+                    className={`w-4 h-4 text-amber-500 transition-transform duration-200 ${
+                      isIdeaCardsSectionOpen ? 'rotate-180' : ''
+                    }`}
+                  />
+                </div>
+              </button>
+
+              {/* Collapsible Content Body */}
+              {isIdeaCardsSectionOpen && (
+                <div className="p-4 pt-0 space-y-3 border-t border-amber-500/20">
+                  {/* Category Filter Pills */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap pt-3">
+                    <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">按分类筛选卡片：</span>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {['核心爆点', '角色设定', '金手指/机制', '世界观法则', '全部'].map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setIdeaCategoryFilter(cat)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                            ideaCategoryFilter === cat
+                              ? 'bg-amber-500 text-white shadow-xs'
+                              : 'bg-white/80 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-amber-500/10'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Idea Cards List Grid */}
+                  {filteredIdeaCards.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-48 overflow-y-auto pr-1">
+                      {filteredIdeaCards.map((card) => {
+                        const isSelected = selectedIdeaCardIds.includes(card.id);
+                        return (
+                          <div
+                            key={card.id}
+                            onClick={() => handleToggleIdeaCard(card.id)}
+                            className={`p-3 rounded-xl border text-xs cursor-pointer transition-all relative group flex flex-col justify-between space-y-2 ${
+                              isSelected
+                                ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500 shadow-sm ring-1 ring-amber-500/50'
+                                : 'bg-white/90 dark:bg-slate-900/90 border-slate-200/80 dark:border-slate-800 hover:border-amber-500/40'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                                  {card.category || '爆点'}
+                                </span>
+                                {card.tag && (
+                                  <span className="text-[10px] text-slate-400 font-medium">
+                                    #{card.tag}
+                                  </span>
+                                )}
+                              </div>
+                              <div
+                                className={`w-4 h-4 rounded-md flex items-center justify-center transition-all ${
+                                  isSelected
+                                    ? 'bg-amber-500 text-white'
+                                    : 'border border-slate-300 dark:border-slate-600 group-hover:border-amber-400'
+                                }`}
+                              >
+                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              </div>
+                            </div>
+
+                            <p className="text-slate-700 dark:text-slate-200 leading-relaxed text-[11px] font-medium line-clamp-3">
+                              {card.content}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-xs text-slate-500 dark:text-slate-400 border border-dashed border-amber-500/20 rounded-xl">
+                      此分类下暂无卡片，可前往【灵感卡片堆叠库】添加或切换上方分类
+                    </div>
+                  )}
+
+                  {/* Selected Cards Summary Bar */}
+                  {selectedIdeaCardIds.length > 0 && (
+                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                          <CheckCircle2 className="w-4 h-4 text-amber-500" />
+                          <span>已叠加 {selectedIdeaCardIds.length} 项爆点卡片</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleAppendSelectedCardsToInput}
+                          className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-[11px] transition-all shadow-xs"
+                        >
+                          ➕ 填入上面文本框
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setSelectedIdeaCardIds([])}
+                        className="text-[11px] text-slate-500 hover:text-rose-500 underline"
+                      >
+                        取消全部选择
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 4. Continuation Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 pt-2">
               <button
                 disabled={isGenerating}
@@ -1256,6 +1433,47 @@ ${chaptersText}`;
             </div>
           </div>
         )}
+
+        {/* 5. Chapter Rewrite Section (Moved to the very bottom of the page) */}
+        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 dark:bg-rose-500/10 overflow-hidden pt-1">
+          <button
+            onClick={() => setIsRewriteOpen(!isRewriteOpen)}
+            className="w-full px-5 py-3 flex items-center justify-between text-left font-bold text-rose-700 dark:text-rose-300 text-xs sm:text-sm hover:bg-rose-500/10 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4" />
+              <span>✒️ 重写当前第 {currentChapterIndex + 1} 章</span>
+            </div>
+            <span>{isRewriteOpen ? '折叠' : '展开重写功能'}</span>
+          </button>
+
+          {isRewriteOpen && (
+            <div className="p-5 border-t border-rose-500/20 space-y-3">
+              <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                请输入本章重写的新剧情走向与要求 (重写后旧版本自动归入历史存档)：
+              </label>
+              <textarea
+                rows={3}
+                value={rewritePlotInput}
+                onChange={(e) => setRewritePlotInput(e.target.value)}
+                placeholder="填写重写要点，例如：改变对峙结局，让主角机智脱身而非受伤..."
+                className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/70 text-xs sm:text-sm focus:outline-hidden focus:ring-2 focus:ring-rose-500/50"
+              />
+              <button
+                disabled={isGenerating}
+                onClick={() => {
+                  if (confirm(`确认要重写第 ${currentChapterIndex + 1} 章吗？当前版本将被放入历史存档。`)) {
+                    handleGenerateNextChapter(rewritePlotInput, true);
+                  }
+                }}
+                className="px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-medium text-xs shadow-md shadow-rose-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>确认重写本章</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Fullscreen Focus Reading Mode Overlay */}

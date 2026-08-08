@@ -257,18 +257,30 @@ export const WriterView: React.FC<WriterViewProps> = ({
   const buildMemoryContext = () => {
     if (!currentBook) return '';
     const memoryCount = Number(currentBook.settings?.contextMemory || 3);
-    if (memoryCount <= 0 || !currentBook.chapters || currentBook.chapters.length === 0) return '';
-
-    const recentChapters = currentBook.chapters.slice(-memoryCount);
     const parts: string[] = [];
 
-    recentChapters.forEach((ch, idx) => {
-      if (idx === recentChapters.length - 1) {
-        parts.push(`【第${ch.index}章回顾 (完整)】\n${ch.text}`);
-      } else {
-        parts.push(`【第${ch.index}章回顾 (前500字摘要)】\n${ch.text.substring(0, 500)}...`);
-      }
-    });
+    // 1. Stage Summaries (如果存在卷/分段大纲总结)
+    if (currentBook.summaries && currentBook.summaries.length > 0) {
+      const summaryText = currentBook.summaries
+        .map((s) => `• 【${s.title || s.chapterRange || '阶段总结'}】: ${s.content}`)
+        .join('\n');
+      parts.push(`# 📚 前情总体阶段总结/分卷梗概：\n${summaryText}`);
+    }
+
+    // 2. Recent chapters context
+    if (memoryCount > 0 && currentBook.chapters && currentBook.chapters.length > 0) {
+      const recentChapters = currentBook.chapters.slice(-memoryCount);
+      const chapterParts: string[] = [];
+
+      recentChapters.forEach((ch, idx) => {
+        if (idx === recentChapters.length - 1) {
+          chapterParts.push(`【第${ch.index}章回顾 (完整内容)】\n${ch.text}`);
+        } else {
+          chapterParts.push(`【第${ch.index}章回顾 (前500字摘要)】\n${ch.text.substring(0, 500)}...`);
+        }
+      });
+      parts.push(`# 📖 最近 ${recentChapters.length} 章细致接续回顾：\n${chapterParts.join('\n\n')}`);
+    }
 
     return parts.join('\n\n');
   };
@@ -345,6 +357,9 @@ export const WriterView: React.FC<WriterViewProps> = ({
 - 人称/时态：${currentBook.settings?.pov || '第三人称'} / ${currentBook.settings?.tense || '现在时'}
 - 核心大纲：\n${currentBook.settings?.outline || ''}`;
 
+    if (currentBook.settings?.aiPersona) {
+      systemPrompt += `\n\n# 🎭 AI 角色助手指令与执笔人设\n${currentBook.settings.aiPersona}`;
+    }
     if (currentBook.settings?.characters) {
       systemPrompt += `\n\n# 主要角色表\n${currentBook.settings.characters}`;
     }
